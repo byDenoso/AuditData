@@ -1,0 +1,53 @@
+name: Build portable MPICH runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/build-portable-mpich.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mpich:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Build MPICH 4.3.2 for the fixed runtime prefix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION=4.3.2
+          PREFIX=/opt/peer-mpich-${VERSION}
+          curl --fail --location --retry 3 \
+            "https://www.mpich.org/static/downloads/${VERSION}/mpich-${VERSION}.tar.gz" \
+            --output "mpich-${VERSION}.tar.gz"
+          sha256sum "mpich-${VERSION}.tar.gz" | tee MPICH_SOURCE_SHA256.txt
+          tar -xzf "mpich-${VERSION}.tar.gz"
+          cd "mpich-${VERSION}"
+          ./configure \
+            --prefix="${PREFIX}" \
+            --with-device=ch3:sock \
+            --disable-fortran \
+            --disable-cxx \
+            --disable-romio
+          make -j2
+          sudo mkdir -p "${PREFIX}"
+          sudo chown -R "$(id -u):$(id -g)" "${PREFIX}"
+          make install
+          "${PREFIX}/bin/mpiexec" -n 2 "${PREFIX}/bin/mpichversion"
+          cd ..
+          mkdir -p artifact
+          tar -C /opt -czf "artifact/peer-mpich-${VERSION}-linux-x86_64.tar.gz" "peer-mpich-${VERSION}"
+          cp MPICH_SOURCE_SHA256.txt artifact/
+          sha256sum artifact/peer-mpich-${VERSION}-linux-x86_64.tar.gz > artifact/PORTABLE_MPICH_SHA256.txt
+
+      - name: Upload portable MPICH
+        uses: actions/upload-artifact@v4
+        with:
+          name: peer-mpich-4.3.2-linux-x86_64
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 3
