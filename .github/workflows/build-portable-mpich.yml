@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Build MPICH 4.3.2 for the fixed runtime prefix
         shell: bash
         run: |
@@ -31,13 +36,23 @@ jobs:
             --prefix="${PREFIX}" \
             --with-device=ch3:sock \
             --disable-fortran \
-            --disable-cxx \
-            --disable-romio
+            --disable-cxx
           make -j2
           sudo mkdir -p "${PREFIX}"
           sudo chown -R "$(id -u):$(id -g)" "${PREFIX}"
           make install
           "${PREFIX}/bin/mpiexec" -n 2 "${PREFIX}/bin/mpichversion"
+          python -m pip install mpi4py==4.1.1
+          LD_LIBRARY_PATH="${PREFIX}/lib" python - <<'PY'
+          from mpi4py import MPI
+          print(MPI.get_vendor())
+          assert MPI.get_vendor()[0] == 'MPICH'
+          PY
+          LD_LIBRARY_PATH="${PREFIX}/lib" "${PREFIX}/bin/mpiexec" -n 2 python - <<'PY'
+          from mpi4py import MPI
+          print(MPI.COMM_WORLD.Get_rank(), MPI.COMM_WORLD.Get_size())
+          assert MPI.COMM_WORLD.Get_size() == 2
+          PY
           cd ..
           mkdir -p artifact
           tar -C /opt -czf "artifact/peer-mpich-${VERSION}-linux-x86_64.tar.gz" "peer-mpich-${VERSION}"
@@ -47,7 +62,7 @@ jobs:
       - name: Upload portable MPICH
         uses: actions/upload-artifact@v4
         with:
-          name: peer-mpich-4.3.2-linux-x86_64
+          name: peer-mpich-4.3.2-linux-x86_64-romio
           path: artifact/
           if-no-files-found: error
           retention-days: 3
