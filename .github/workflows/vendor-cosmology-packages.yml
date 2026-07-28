@@ -1,0 +1,36 @@
+name: Vendor cosmology Python packages
+
+on:
+  push:
+    paths:
+      - .github/workflows/vendor-cosmology-packages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download exact wheels
+        run: |
+          set -euxo pipefail
+          mkdir -p vendor
+          python -m pip download --only-binary=:all: --no-deps -d vendor \
+            camb==1.6.6 \
+            getdist==1.7.7 \
+            cobaya==3.6.2 \
+            dynesty==3.0.0
+          sha256sum vendor/* | tee vendor/SHA256SUMS.txt
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosmology-python-wheels
+          path: vendor/
+          if-no-files-found: error
+          retention-days: 1
