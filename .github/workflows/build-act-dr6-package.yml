@@ -1,0 +1,67 @@
+name: Build pinned ACT DR6 package
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/build-act-dr6-package.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install runtime tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'cobaya==3.6.2' pytest
+
+      - name: Fetch pinned official likelihood
+        run: |
+          git clone https://github.com/ACTCollaboration/DR6-ACT-lite.git act-dr6-lite
+          cd act-dr6-lite
+          git checkout 627aeafb88ae5ad1aa66b406bea2d65cfa66a27d
+          test "$(git rev-parse HEAD)" = "627aeafb88ae5ad1aa66b406bea2d65cfa66a27d"
+          python -m pip install -e .
+
+      - name: Install official ACT data
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/act_packages"
+          cobaya-install act_dr6_cmbonly --packages-path "$GITHUB_WORKSPACE/act_packages" --debug
+          cobaya-install act_dr6_cmbonly.PlanckActCut --packages-path "$GITHUB_WORKSPACE/act_packages" --debug
+
+      - name: Run official tests
+        run: |
+          pytest -v --pyargs act_dr6_cmbonly
+
+      - name: Build provenance package
+        run: |
+          mkdir -p bundle/source bundle/packages
+          cp -a act-dr6-lite/. bundle/source/DR6-ACT-lite/
+          cp -a act_packages/data bundle/packages/
+          printf '%s\n' 'ACTCollaboration/DR6-ACT-lite' > bundle/REPOSITORY.txt
+          printf '%s\n' '627aeafb88ae5ad1aa66b406bea2d65cfa66a27d' > bundle/COMMIT.txt
+          python --version > bundle/PYTHON_VERSION.txt
+          python -m pip freeze > bundle/PIP_FREEZE.txt
+          find bundle -type f -print0 | sort -z | xargs -0 sha256sum > bundle/SHA256SUMS.txt
+          tar -czf ACT_DR6_CMBONLY_PINNED_627aeafb.tar.gz bundle
+          sha256sum ACT_DR6_CMBONLY_PINNED_627aeafb.tar.gz > ACT_DR6_CMBONLY_PINNED_627aeafb.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: act-dr6-cmbonly-pinned-627aeafb
+          path: |
+            ACT_DR6_CMBONLY_PINNED_627aeafb.tar.gz
+            ACT_DR6_CMBONLY_PINNED_627aeafb.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
