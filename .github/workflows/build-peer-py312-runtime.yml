@@ -1,0 +1,134 @@
+name: Build PEER Python 3.12 Runtime
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/peer-py312-trigger.txt'
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+          architecture: 'x64'
+
+      - name: Record base runtime
+        run: |
+          set -euxo pipefail
+          python --version
+          python - <<'PY'
+          import os, platform, sys, sysconfig
+          print('executable=', sys.executable)
+          print('prefix=', sys.prefix)
+          print('pythonLocation=', os.environ.get('pythonLocation'))
+          print('platform=', platform.platform())
+          print('SOABI=', sysconfig.get_config_var('SOABI'))
+          PY
+          ldd "$(command -v python)" || true
+
+      - name: Build exact PEER wheelhouse
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip wheel setuptools
+          mkdir -p wheels
+          cat > requirements-peer-py312.txt <<'REQ'
+          astropy==7.2.0
+          camb==1.6.6
+          cobaya==3.6.2
+          contourpy==1.3.3
+          dill==0.4.1
+          fgspectra==1.4.1
+          getdist==1.7.7
+          matplotlib==3.10.9
+          mpi4py==4.1.1
+          mpmath==1.3.0
+          numpy==2.4.4
+          pandas==3.0.3
+          py-bobyqa==1.5.0
+          pyyaml==6.0.3
+          scipy==1.17.1
+          sympy==1.14.0
+          syslibrary==0.2
+          tqdm==4.67.3
+          typing-extensions==4.15.0
+          REQ
+          python -m pip wheel --wheel-dir wheels -r requirements-peer-py312.txt
+          sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
+          cp requirements-peer-py312.txt wheels/
+
+      - name: Offline install and scientific smoke test
+        run: |
+          set -euxo pipefail
+          python -m venv smoke-venv
+          smoke-venv/bin/python -m pip install --no-index --find-links wheels -r requirements-peer-py312.txt
+          smoke-venv/bin/python - <<'PY'
+          import camb, cobaya, numpy, scipy, pandas, yaml, pybobyqa
+          from camb.dark_energy import EarlyQuintessence
+          print('camb', camb.__version__)
+          print('cobaya', cobaya.__version__)
+          print('numpy', numpy.__version__)
+          print('scipy', scipy.__version__)
+          print('pandas', pandas.__version__)
+          print('pyyaml', yaml.__version__)
+          print('pybobyqa', getattr(pybobyqa, '__version__', 'unknown'))
+          ede = EarlyQuintessence()
+          ede.n = 3
+          ede.fde_zc = 0.01
+          ede.zc = 10**3.81
+          ede.theta_i = 2.89155
+          pars = camb.CAMBparams()
+          pars.set_cosmology(H0=67.5, ombh2=0.0224, omch2=0.12, tau=0.054)
+          pars.InitPower.set_params(As=2.1e-9, ns=0.965)
+          pars.set_for_lmax(300, lens_potential_accuracy=0)
+          pars.DarkEnergy = ede
+          results = camb.get_results(pars)
+          print('H0=', results.hubble_parameter(0.0))
+          print('rdrag=', results.get_derived_params()['rdrag'])
+          print('PEER_PY312_SMOKE_OK')
+          PY
+
+      - name: Package relocatable setup-python runtime
+        run: |
+          set -euxo pipefail
+          mkdir -p runtime-package
+          BASE_DIR="$(dirname "$pythonLocation")"
+          BASE_NAME="$(basename "$pythonLocation")"
+          tar -C "$BASE_DIR" -czf runtime-package/python-3.12.13-linux-x64.tar.gz "$BASE_NAME"
+          {
+            echo "python_version=$(python --version 2>&1)"
+            echo "pythonLocation=$pythonLocation"
+            echo "runner=$(uname -a)"
+            echo "sha256=$(sha256sum runtime-package/python-3.12.13-linux-x64.tar.gz | awk '{print $1}')"
+          } | tee runtime-package/RUNTIME_INFO.txt
+
+      - name: Upload Python runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-3.12.13-linux-x64-runtime
+          path: runtime-package
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+      - name: Upload PEER wheelhouse
+        uses: actions/upload-artifact@v4
+        with:
+          name: peer-wheelhouse-py312
+          path: wheels
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
