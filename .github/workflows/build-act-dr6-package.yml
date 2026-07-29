@@ -26,6 +26,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install 'cobaya==3.6.2' pytest
 
+      - name: Build exact SACC wheel
+        run: |
+          mkdir -p wheelhouse
+          python -m pip wheel 'sacc==2.4' --no-deps --wheel-dir wheelhouse
+          test "$(find wheelhouse -maxdepth 1 -name 'sacc-2.4-*.whl' | wc -l)" -eq 1
+
       - name: Fetch pinned official likelihood
         run: |
           git clone https://github.com/ACTCollaboration/DR6-ACT-lite.git act-dr6-lite
@@ -46,9 +52,10 @@ jobs:
 
       - name: Build provenance package
         run: |
-          mkdir -p bundle/source bundle/packages
+          mkdir -p bundle/source bundle/packages bundle/wheelhouse
           cp -a act-dr6-lite/. bundle/source/DR6-ACT-lite/
           cp -a act_packages/data bundle/packages/
+          cp wheelhouse/sacc-2.4-*.whl bundle/wheelhouse/
           printf '%s\n' 'ACTCollaboration/DR6-ACT-lite' > bundle/REPOSITORY.txt
           printf '%s\n' '627aeafb88ae5ad1aa66b406bea2d65cfa66a27d' > bundle/COMMIT.txt
           python --version > bundle/PYTHON_VERSION.txt
