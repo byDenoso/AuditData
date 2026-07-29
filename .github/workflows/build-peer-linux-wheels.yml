@@ -31,6 +31,7 @@ jobs:
           mkdir -p wheels
           python -m pip download --dest wheels --only-binary=:all: camb==1.6.6 cobaya==3.6.2
           python -m pip download --dest wheels numpy scipy pyyaml pandas getdist mpi4py dill tqdm packaging typing-extensions
+          python -m pip download --dest wheels astropy flit_core fgspectra syslibrary
           sha256sum wheels/* | tee wheels/SHA256SUMS.txt
       - name: Upload wheelhouse
         uses: actions/upload-artifact@v4
