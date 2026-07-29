@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/build-peer-py312-env.yml'
       - 'peer-env-trigger.txt'
+  pull_request:
+    paths:
+      - '.github/workflows/build-peer-py312-env.yml'
+      - 'peer-env-trigger.txt'
   workflow_dispatch:
 
 permissions:
