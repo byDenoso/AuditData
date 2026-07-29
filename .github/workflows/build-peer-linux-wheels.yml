@@ -5,6 +5,9 @@ on:
   push:
     paths:
       - '.github/peer-wheel-trigger.txt'
+  pull_request:
+    paths:
+      - '.github/peer-wheel-pr-trigger.txt'
 
 permissions:
   contents: read
