@@ -36,7 +36,8 @@ jobs:
             planck_2018_lowl.EE \
             planck_2018_lensing.clik \
             -p "$PWD/packages" --no-set-global
-          find packages -maxdepth 5 -type f | sort | head -200
+          find packages -maxdepth 5 -type f | sort > planck-package-filelist.txt
+          sed -n '1,200p' planck-package-filelist.txt
           du -sh packages
           tar -C packages -czf planck-packages-py312.tar.gz .
           sha256sum planck-packages-py312.tar.gz > planck-packages-py312.tar.gz.sha256
@@ -47,5 +48,6 @@ jobs:
           path: |
             planck-packages-py312.tar.gz
             planck-packages-py312.tar.gz.sha256
+            planck-package-filelist.txt
           compression-level: 0
           retention-days: 3
