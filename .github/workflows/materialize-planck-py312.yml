@@ -1,0 +1,51 @@
+name: Materialize Planck Python 3.12
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/materialize-planck-trigger.txt'
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Install scientific runtime
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install camb==1.6.6 cobaya==3.6.2 fgspectra==1.4.1 syslibrary==0.2 astropy==7.2.0 py-bobyqa==1.5.0
+      - name: Materialize public Planck likelihoods
+        run: |
+          set -euxo pipefail
+          mkdir -p packages
+          cobaya-install \
+            planck_2018_highl_plik.TTTEEE_lite \
+            planck_2018_lowl.TT \
+            planck_2018_lowl.EE \
+            planck_2018_lensing.clik \
+            -p "$PWD/packages" --no-set-global
+          find packages -maxdepth 5 -type f | sort | head -200
+          du -sh packages
+          tar -C packages -czf planck-packages-py312.tar.gz .
+          sha256sum planck-packages-py312.tar.gz > planck-packages-py312.tar.gz.sha256
+      - name: Upload materialized packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: planck-packages-py312
+          path: |
+            planck-packages-py312.tar.gz
+            planck-packages-py312.tar.gz.sha256
+          compression-level: 0
+          retention-days: 3
