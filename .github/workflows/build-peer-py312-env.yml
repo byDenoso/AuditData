@@ -23,12 +23,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: '0.8.17'
-      - name: Build relocatable Python 3.12 environment
+      - name: Build portable Python 3.12 runtime
         shell: bash
         run: |
           set -euxo pipefail
           uv python install 3.12
-          uv venv --python 3.12 --relocatable peer-py312
+          uv venv --python 3.12 peer-py312
           uv pip install --python peer-py312/bin/python \
             astropy==7.2.0 \
             camb==1.6.6 \
@@ -53,7 +53,16 @@ jobs:
             syslibrary==0.2 \
             tqdm==4.67.3 \
             typing-extensions==4.15.0
-          peer-py312/bin/python - <<'PY'
+          PYTHON_EXE="$(readlink -f peer-py312/bin/python)"
+          PYTHON_ROOT="$(dirname "$(dirname "$PYTHON_EXE")")"
+          mkdir -p peer-runtime
+          cp -a "$PYTHON_ROOT" peer-runtime/python312
+          cp -a peer-py312 peer-runtime/peer-py312
+          rm -f peer-runtime/peer-py312/bin/python peer-runtime/peer-py312/bin/python3 peer-runtime/peer-py312/bin/python3.12
+          ln -s ../../python312/bin/python3.12 peer-runtime/peer-py312/bin/python
+          ln -s python peer-runtime/peer-py312/bin/python3
+          ln -s python peer-runtime/peer-py312/bin/python3.12
+          peer-runtime/peer-py312/bin/python - <<'PY'
           import sys, camb, cobaya, dynesty, numpy, scipy, pybobyqa
           print(sys.version)
           print('camb', camb.__version__)
@@ -63,13 +72,13 @@ jobs:
           print('scipy', scipy.__version__)
           print('pybobyqa', pybobyqa.__version__)
           PY
-          tar --zstd -cf peer-py312-env.tar.zst peer-py312
-          sha256sum peer-py312-env.tar.zst > peer-py312-env.tar.zst.sha256
+          tar --zstd -cf peer-py312-runtime.tar.zst peer-runtime
+          sha256sum peer-py312-runtime.tar.zst > peer-py312-runtime.tar.zst.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: peer-py312-env
+          name: peer-py312-runtime
           path: |
-            peer-py312-env.tar.zst
-            peer-py312-env.tar.zst.sha256
+            peer-py312-runtime.tar.zst
+            peer-py312-runtime.tar.zst.sha256
           retention-days: 7
           compression-level: 0
