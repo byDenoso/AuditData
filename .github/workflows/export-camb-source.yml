@@ -3,6 +3,9 @@ name: Export pinned CAMB source
 on:
   push:
     branches: [export-camb-source-20260730]
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/export-camb-source.yml']
   workflow_dispatch:
 
 permissions:
