@@ -13,16 +13,16 @@ permissions:
 
 jobs:
   export:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
     steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Download and verify CAMB 1.6.6 source
         run: |
+          set -euo pipefail
           mkdir -p dist
-          python -m pip download 'camb==1.6.6' --no-binary=:all: --no-deps --dest dist
+          curl --fail --location --silent --show-error \
+            'https://files.pythonhosted.org/packages/6d/ad/f2e6446fbd94f7adc1474e1f4e40d2e7fa7e5e7143640cb8557d492f0a73/camb-1.6.6.tar.gz' \
+            --output dist/camb-1.6.6.tar.gz
           echo '9856202a5c05570256e52377b20431891c7b08b2e9c334e141fd08d2a085516f  dist/camb-1.6.6.tar.gz' | sha256sum --check
       - uses: actions/upload-artifact@v4
         with:
