@@ -33,6 +33,13 @@
     "global_n95_closed": false
   },
   "claim_boundary": "No calibrated p-value or sigma: n is unidentified at f_PEER=0, the null is a boundary point, and the standard-cosmology profile is locally linearized.",
+  "verification": {
+    "fresh_workspace_tests": "19 passed",
+    "fresh_extracted_package_tests": "19 passed",
+    "hash_manifests": "all passed",
+    "zip_integrity": "passed",
+    "verified_at_utc": "2026-07-31T21:25:00Z"
+  },
   "provenance": {
     "generator_lineage_commit": "16d1df948ba17762ff430b9de293cba799ed1e7e",
     "grid_pr": 15,
@@ -43,7 +50,7 @@
     "tangent_run_id": 30665307777,
     "tangent_artifact_id": 8806742786,
     "tangent_artifact_digest": "sha256:887ed2347ad2fb8b80b79819409cbfaa259b0b4b40bca5b2b43afe627692a46a",
-    "reproducibility_package_sha256": "0504024491f9ce39c469cf5cecd869002079455b4e3548149e0b3077535ccd6e"
+    "reproducibility_package_sha256": "0c421b04320e31067219a60f22914c4896de187745160e89cc2a52db1768d6c7"
   },
   "next_gate": "Full nonlinear n-free sampling with exact CAMB updates across the f-n ridge, followed by boundary-null calibration with mocks."
 }
