@@ -1,0 +1,123 @@
+name: PEER CPL composite CAMB gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/peer-cpl-composite.yml'
+      - 'scripts/peer_cpl_composite/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peer-cpl-composite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install compiler and Python build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+          python -m pip install --upgrade pip wheel setuptools numpy
+
+      - name: Download and verify official CAMB 1.6.6 source
+        run: |
+          set -euo pipefail
+          mkdir -p build/source
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen
+          import hashlib
+
+          url = 'https://files.pythonhosted.org/packages/6d/ad/f2e6446fbd94f7adc1474e1f4e40d2e7fa7e5e7143640cb8557d492f0a73/camb-1.6.6.tar.gz'
+          expected = '9856202a5c05570256e52377b20431891c7b08b2e9c334e141fd08d2a085516f'
+          target = Path('build/source/camb-1.6.6.tar.gz')
+          target.write_bytes(urlopen(url, timeout=120).read())
+          observed = hashlib.sha256(target.read_bytes()).hexdigest()
+          if observed != expected:
+              raise SystemExit(f'CAMB source hash mismatch: {observed}')
+          print(f'CAMB_SOURCE_SHA256={observed}')
+          PY
+          tar -xzf build/source/camb-1.6.6.tar.gz -C build/source
+          test -f build/source/camb-1.6.6/fortran/DarkEnergyQuintessence.f90
+
+      - name: Apply composite PEER plus CPL patch
+        run: |
+          set -euo pipefail
+          python scripts/peer_cpl_composite/apply_peer_cpl_patch.py build/source/camb-1.6.6
+          grep -q 'module PeerCPL' build/source/camb-1.6.6/fortran/PeerCPL.f90
+          grep -q 'EvolveBackgroundDispatch' build/source/camb-1.6.6/fortran/DarkEnergyQuintessence.f90
+          grep -q 'class PeerCPL' build/source/camb-1.6.6/camb/dark_energy.py
+
+      - name: Build patched CAMB wheel
+        run: |
+          set -euo pipefail
+          mkdir -p build/dist
+          python -m pip wheel --no-deps build/source/camb-1.6.6 -w build/dist 2>&1 | tee build/CAMB_BUILD.log
+          python -m pip install --force-reinstall --no-deps build/dist/camb-1.6.6-*.whl
+          python - <<'PY'
+          import camb
+          from camb.dark_energy import PeerCPL
+          print('CAMB', camb.__version__)
+          print('PeerCPL', PeerCPL)
+          PY
+
+      - name: Run null-recovery and active composite gates
+        run: |
+          set -euo pipefail
+          python scripts/peer_cpl_composite/run_peer_cpl_gates.py \
+            --output build/results \
+            --lmax 900
+
+      - name: Record source and wheel hashes
+        if: always()
+        run: |
+          set -u
+          mkdir -p build
+          if test -f build/source/camb-1.6.6.tar.gz; then
+            sha256sum build/source/camb-1.6.6.tar.gz > build/OFFICIAL_SOURCE_SHA256.txt
+          fi
+          if compgen -G 'build/dist/*.whl' > /dev/null; then
+            sha256sum build/dist/*.whl > build/PATCHED_WHEEL_SHA256.txt
+          fi
+          git rev-parse HEAD > build/REPOSITORY_HEAD.txt
+          gfortran --version | head -1 > build/GFORTRAN_VERSION.txt || true
+          python --version > build/PYTHON_VERSION.txt
+
+      - name: Upload reproducibility artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: peer-cpl-composite-${{ github.run_id }}
+          path: |
+            build/results/
+            build/CAMB_BUILD.log
+            build/dist/*.whl
+            build/source/camb-1.6.6.tar.gz
+            build/source/camb-1.6.6/fortran/PeerCPL.f90
+            build/source/camb-1.6.6/fortran/DarkEnergyInterface.f90
+            build/source/camb-1.6.6/fortran/DarkEnergyPPF.f90
+            build/source/camb-1.6.6/fortran/DarkEnergyQuintessence.f90
+            build/source/camb-1.6.6/fortran/equations.f90
+            build/source/camb-1.6.6/fortran/Makefile_main
+            build/source/camb-1.6.6/camb/dark_energy.py
+            build/OFFICIAL_SOURCE_SHA256.txt
+            build/PATCHED_WHEEL_SHA256.txt
+            build/REPOSITORY_HEAD.txt
+            build/GFORTRAN_VERSION.txt
+            build/PYTHON_VERSION.txt
+          if-no-files-found: warn
+          retention-days: 30

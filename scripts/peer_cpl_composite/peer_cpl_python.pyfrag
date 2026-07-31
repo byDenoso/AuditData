@@ -1,0 +1,61 @@
+
+
+@fortran_class
+class PeerCPL(EarlyQuintessence):
+    r"""Composite PEER scalar plus independent late CPL/PPF component.
+
+    The Fortran implementation evolves the EarlyQuintessence background and
+    perturbations together with a separate late-time CPL background and PPF
+    Gamma perturbation variable in one CAMB run.
+    """
+
+    _fortran_class_module_ = "PeerCPL"
+    _fortran_class_name_ = "TPeerCPL"
+    _fields_ = (
+        ("w", c_double, "late CPL w0"),
+        ("wa", c_double, "late CPL wa"),
+        ("peer_enabled", c_bool),
+        ("cpl_enabled", c_bool),
+        ("c_Gamma_ppf", c_double),
+        ("__grhov0", c_double),
+        ("__peer_eqs", c_int),
+        ("__late_eqs", c_int),
+        ("__composite_state", f_pointer),
+    )
+
+    def set_params(
+        self,
+        *,
+        fde_zc=0.0,
+        zc=10**3.81,
+        theta_i=2.89155,
+        n=3.0,
+        w=-1.0,
+        wa=0.0,
+        peer_enabled=True,
+        cpl_enabled=True,
+    ):
+        if cpl_enabled and w + wa > 0:
+            raise CAMBError("PeerCPL has w0 + wa > 0, giving dominant early late-DE density")
+        self.peer_enabled = bool(peer_enabled and fde_zc > 1e-12)
+        self.cpl_enabled = bool(cpl_enabled)
+        self.w = float(w)
+        self.wa = float(wa)
+        self.c_Gamma_ppf = 0.4
+        self.frac_lambda0 = 0.0
+        if self.peer_enabled:
+            super().set_params(
+                n=float(n),
+                theta_i=float(theta_i),
+                use_zc=True,
+                zc=float(zc),
+                fde_zc=float(fde_zc),
+            )
+            self.frac_lambda0 = 0.0
+        else:
+            self.n = float(n)
+            self.theta_i = float(theta_i)
+            self.use_zc = False
+            self.zc = float(zc)
+            self.fde_zc = 0.0
+        return self
