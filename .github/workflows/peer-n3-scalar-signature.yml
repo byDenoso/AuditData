@@ -20,6 +20,7 @@ concurrency:
 
 env:
   PYTHON_VERSION: '3.12'
+  PYTHONPATH: ${{ github.workspace }}
   OMP_NUM_THREADS: '2'
   OPENBLAS_NUM_THREADS: '2'
   MKL_NUM_THREADS: '2'
@@ -62,7 +63,7 @@ jobs:
       - name: Run analysis primitive tests
         run: |
           set -euo pipefail
-          pytest -q tests/test_peer_n3_signature.py
+          python -m pytest -q tests/test_peer_n3_signature.py
           python -m compileall -q peer_n3_signature
 
       - name: Generate stock scalar, effective-fluid and nuisance spectra
@@ -86,8 +87,6 @@ jobs:
             |& tee results/n3_signature/nopert_build.log
 
       - name: Generate exact-background no-perturbation spectrum
-        env:
-          PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
           timeout --signal=INT --kill-after=60s 30m \
