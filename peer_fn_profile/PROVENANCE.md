@@ -1,0 +1,1 @@
+Generator source lineage: byDenoso/AuditData commit 16d1df948ba17762ff430b9de293cba799ed1e7e, peer_n3_signature/generate.py. T-FN-001 preserves the canonical cosmology, EarlyQuintessence parameterization, lmax=3000, lensing, NonLinear_none, and CAMB accuracy boosts, while extending only the physical f_PEER and n grid.
