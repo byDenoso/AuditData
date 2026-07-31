@@ -1,4 +1,4 @@
-name: PEER n3 scalar perturbation signature
+name: PEER n3 physical local fingerprint
 
 on:
   pull_request:
@@ -6,7 +6,6 @@ on:
     paths:
       - 'peer_n3_signature/**'
       - 'tests/test_peer_n3_signature.py'
-      - 'scripts/build_camb_nopert.sh'
       - '.github/workflows/peer-n3-scalar-signature.yml'
       - 'docs/superpowers/plans/2026-07-31-peer-n3-scalar-signature.md'
   workflow_dispatch:
@@ -15,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: peer-n3-signature-${{ github.workflow }}-${{ github.ref }}
+  group: peer-n3-local-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -28,9 +27,9 @@ env:
   MPLBACKEND: Agg
 
 jobs:
-  signature:
+  fingerprint:
     runs-on: ubuntu-24.04
-    timeout-minutes: 210
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -38,13 +37,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install compiler and numerical libraries
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y gfortran liblapack-dev libgsl-dev
-
-      - name: Install pinned stock CAMB runtime
+      - name: Install pinned CAMB runtime
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip wheel
@@ -57,54 +50,35 @@ jobs:
           python - <<'PY'
           import camb, matplotlib, numpy, scipy
           assert camb.__version__ == '1.6.6'
-          print('STOCK_RUNTIME_PASS', camb.__version__, numpy.__version__, scipy.__version__, matplotlib.__version__)
+          print('RUNTIME_PASS', camb.__version__, numpy.__version__, scipy.__version__, matplotlib.__version__)
           PY
 
-      - name: Run analysis primitive tests
+      - name: Run analysis tests
         run: |
           set -euo pipefail
           python -m pytest -q tests/test_peer_n3_signature.py
           python -m compileall -q peer_n3_signature
 
-      - name: Generate stock scalar, effective-fluid and nuisance spectra
+      - name: Generate physical scalar family and nuisance spectra
         run: |
           set -euo pipefail
-          mkdir -p results/n3_signature/spectra
+          mkdir -p results/n3_local/spectra
           timeout --signal=INT --kill-after=60s 110m \
             python -m peer_n3_signature.generate \
               --mode stock \
-              --output results/n3_signature/spectra \
+              --output results/n3_local/spectra \
               --lmax 3000 \
-            |& tee results/n3_signature/stock_generation.log
+            |& tee results/n3_local/generation.log
 
-      - name: Build exact-background no-perturbation CAMB
+      - name: Extract physical local n3 fingerprint
         run: |
           set -euo pipefail
-          bash scripts/build_camb_nopert.sh \
-            .cache/camb-1.6.6-nopert \
-            .venv-nopert \
-            results/n3_signature/spectra/camb_nopert_provenance.json \
-            |& tee results/n3_signature/nopert_build.log
+          python -m peer_n3_signature.analyze_local_n \
+            --input results/n3_local/spectra \
+            --output results/n3_local/fingerprint \
+            |& tee results/n3_local/analysis.log
 
-      - name: Generate exact-background no-perturbation spectrum
-        run: |
-          set -euo pipefail
-          timeout --signal=INT --kill-after=60s 30m \
-            .venv-nopert/bin/python -m peer_n3_signature.generate \
-              --mode nopert \
-              --output results/n3_signature/spectra \
-              --lmax 3000 \
-            |& tee results/n3_signature/nopert_generation.log
-
-      - name: Extract nuisance-projected n3 fingerprint
-        run: |
-          set -euo pipefail
-          python -m peer_n3_signature.analyze_unlensed \
-            --input results/n3_signature/spectra \
-            --output results/n3_signature/fingerprint \
-            |& tee results/n3_signature/analysis.log
-
-      - name: Validate scientific evidence contract
+      - name: Validate evidence contract
         env:
           COMMIT_SHA: ${{ github.sha }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
@@ -118,49 +92,52 @@ jobs:
           import os
           from pathlib import Path
 
-          root = Path('results/n3_signature')
+          root = Path('results/n3_local')
           spectra = root / 'spectra'
           fingerprint = root / 'fingerprint'
           required = [
-              fingerprint / 'signature_metrics.json',
-              fingerprint / 'signature_spectra.csv',
+              fingerprint / 'local_n3_metrics.json',
+              fingerprint / 'local_n3_spectra.csv',
               fingerprint / 'REPORT.md',
-              fingerprint / 'exact_scalar_signature.png',
-              fingerprint / 'projected_signature.png',
-              fingerprint / 'band_ranking.png',
-              spectra / 'camb_nopert_provenance.json',
+              fingerprint / 'local_n3_projected_signature.png',
+              fingerprint / 'n3_curvature_signature.png',
+              fingerprint / 'local_n3_band_ranking.png',
+              fingerprint / 'local_n3_lensing_signature.png',
               spectra / 'generation_contract.json',
-              spectra / 'nopert_contract.json',
           ]
           missing = [str(path) for path in required if not path.is_file() or path.stat().st_size == 0]
           assert not missing, missing
-          npz = sorted(spectra.glob('*.npz'))
-          assert len(npz) == 20, f'expected 20 spectra, found {len(npz)}'
-          result = json.loads((fingerprint / 'signature_metrics.json').read_text(encoding='utf-8'))
-          assert result['test_id'] == 'T-N3-003'
-          assert result['evidence_class'] == 'EXACT_BACKGROUND_CAMB_PERTURBATION_ABLATION'
-          assert result['exact_ablation_space'] == 'unlensed TT/TE/EE'
+          assert len(list(spectra.glob('*.npz'))) == 19
+          result = json.loads((fingerprint / 'local_n3_metrics.json').read_text(encoding='utf-8'))
+          assert result['test_id'] == 'T-N3-004'
+          assert result['evidence_class'] == 'PHYSICAL_LOCAL_N_DERIVATIVE_CAMB_FINGERPRINT'
           assert result['status'] in {
-              'DISTINCT_N3_SCALAR_PERTURBATION_FINGERPRINT',
-              'SCALAR_PERTURBATION_RESPONSE_NOT_N3_SPECIFIC',
-              'NO_DISTINCT_N3_SCALAR_PERTURBATION_FINGERPRINT',
+              'N3_SPECIFIC_CURVATURE_PRESENT',
+              'LOCAL_N3_SCALAR_FINGERPRINT_PRESENT_NOT_UNIQUE',
+              'NO_RESOLVABLE_LOCAL_N3_FINGERPRINT',
           }
-          for key, value in result['background_equality'].items():
-              assert math.isfinite(float(value)), (key, value)
-              assert float(value) <= 2e-9, (key, value)
-          assert math.isfinite(float(result['projected_cv_norm_ell30_3000']))
-          assert 0 <= float(result['survival_fraction']) <= 1.000001
-          assert result['lensing_control']['exact_no_perturbation_lensing_available'] is False
-          assert 'not Planck, ACT or SPT likelihood significances' in result['claim_boundary']
+          local = result['local_step']
+          curvature = result['n3_specific_curvature']
+          for value in (
+              local['raw_cv_norm_ell30_3000'],
+              local['projected_cv_norm_ell30_3000'],
+              local['survival_fraction'],
+              curvature['projected_cv_norm_ell30_3000'],
+              result['lensing_companion']['projected_cv_norm_L30_2000'],
+          ):
+              assert math.isfinite(float(value))
+          assert 0 <= float(local['survival_fraction']) <= 1.000001
+          assert local['best_band']['ell_min'] >= 30
+          assert result['retired_test']['test_id'] == 'T-N3-003'
+          assert 'not a Planck, ACT or SPT detection significance' in result['claim_boundary']
           report = (fingerprint / 'REPORT.md').read_text(encoding='utf-8')
-          assert 'not an observed detection' in report
+          assert 'not an observed significance' in report
 
           manifest = {
-              'test_id': 'T-N3-003',
-              'objective': 'Find a CMB signature of linear perturbations in the canonical PEER scalar n=3 model.',
-              'model': 'CAMB 1.6.6 EarlyQuintessence n=3 exact-background perturbation ablation',
+              'test_id': 'T-N3-004',
+              'objective': 'Find the physical local scalar-family CMB fingerprint around n=3.',
+              'models': ['EarlyQuintessence n=2.8', 'EarlyQuintessence n=3.0', 'EarlyQuintessence n=3.2'],
               'canonical_slice': {
-                  'n': 3.0,
                   'fde_zc': 0.0880,
                   'log10_zc': 3.81,
                   'theta_i': 2.89155,
@@ -179,21 +156,22 @@ jobs:
               if path.is_file() and path.name != 'ALL_FILES.sha256':
                   hashes.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root)}")
           (root / 'ALL_FILES.sha256').write_text('\n'.join(hashes) + '\n', encoding='utf-8')
-          print('VALIDATED_N3_SIGNATURE=' + json.dumps({
+          print('VALIDATED_LOCAL_N3=' + json.dumps({
               'status': result['status'],
-              'projected_cv_norm': result['projected_cv_norm_ell30_3000'],
-              'survival_fraction': result['survival_fraction'],
-              'best_band': result['best_band']['name'],
-              'n_cosine': result['cosine_with_local_n_derivative'],
+              'projected_cv_norm': local['projected_cv_norm_ell30_3000'],
+              'survival_fraction': local['survival_fraction'],
+              'best_band': local['best_band']['name'],
+              'curvature_cv_norm': curvature['projected_cv_norm_ell30_3000'],
+              'lensing_cv_norm': result['lensing_companion']['projected_cv_norm_L30_2000'],
           }, sort_keys=True))
           print('COMPLETION_CONTRACT_PASS')
           PY
 
-      - name: Upload complete n3 signature package
+      - name: Upload complete physical n3 package
         uses: actions/upload-artifact@v4
         with:
-          name: peer-n3-scalar-signature-${{ github.run_id }}-${{ github.run_attempt }}
-          path: results/n3_signature
+          name: peer-n3-physical-fingerprint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/n3_local
           if-no-files-found: error
           retention-days: 90
           compression-level: 6
