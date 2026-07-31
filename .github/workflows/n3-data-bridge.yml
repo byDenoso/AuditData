@@ -1,0 +1,56 @@
+name: N3 official likelihood data bridge
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/n3-data-bridge.yml'
+      - 'data_bridge_trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned likelihood sources and official data
+        run: |
+          set -euo pipefail
+          mkdir -p bridge/source bridge/output
+          git clone https://github.com/Lbalkenhol/candl.git bridge/source/candl
+          git -C bridge/source/candl checkout 650db0a6a0a2febed1e57350f0b991b537a4d2f7
+          git clone https://github.com/Lbalkenhol/candl_data.git bridge/source/candl_data
+          git -C bridge/source/candl_data checkout c4eb8fbc5b0eb259ba487494b3cff918eac5c47a
+          git clone https://github.com/SouthPoleTelescope/spt_candl_data.git bridge/source/spt_candl_data
+          SPT_COMMIT=$(git -C bridge/source/spt_candl_data rev-parse HEAD)
+          mkdir -p bridge/output/candl bridge/output/act bridge/output/spt
+          cp -a bridge/source/candl/. bridge/output/candl/
+          cp -a bridge/source/candl_data/candl_data/ACT_DR6_CMB_only_v0/. bridge/output/act/
+          cp -a bridge/source/spt_candl_data/. bridge/output/spt/
+          cat > bridge/output/PROVENANCE.json <<JSON
+          {
+            "transport_only": true,
+            "candl_repository": "https://github.com/Lbalkenhol/candl",
+            "candl_commit": "650db0a6a0a2febed1e57350f0b991b537a4d2f7",
+            "candl_data_repository": "https://github.com/Lbalkenhol/candl_data",
+            "candl_data_commit": "c4eb8fbc5b0eb259ba487494b3cff918eac5c47a",
+            "act_dataset": "ACT_DR6_CMB_only_v0",
+            "spt_repository": "https://github.com/SouthPoleTelescope/spt_candl_data",
+            "spt_commit": "$SPT_COMMIT"
+          }
+          JSON
+          find bridge/output -type f -print0 | sort -z | xargs -0 sha256sum > bridge/output/FILES.sha256
+          du -sh bridge/output
+          find bridge/output/act -maxdepth 2 -type f | sort
+          find bridge/output/spt -maxdepth 5 -type f | grep -Ei 'D1|TEE|TEEE|base|yaml' | head -200
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n3-official-likelihood-data-${{ github.run_id }}
+          path: bridge/output
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 6
