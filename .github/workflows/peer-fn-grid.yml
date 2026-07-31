@@ -1,0 +1,186 @@
+name: PEER physical f-n exact grid
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'peer_fn_profile/**'
+      - '.github/workflows/peer-fn-grid.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peer-fn-grid-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.12'
+  PYTHONPATH: ${{ github.workspace }}
+  OMP_NUM_THREADS: '2'
+  OPENBLAS_NUM_THREADS: '2'
+  MKL_NUM_THREADS: '2'
+  NUMEXPR_NUM_THREADS: '2'
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip wheel
+          python -m pip install 'numpy==2.1.3' 'scipy==1.14.1' 'camb==1.6.6'
+      - name: Verify generator contract
+        run: |
+          set -euo pipefail
+          python -m compileall -q peer_fn_profile
+          python - <<'PY'
+          import camb
+          from peer_fn_profile.generate_grid import label_for, parse_grid
+          assert camb.__version__ == '1.6.6'
+          assert label_for(0.088, 3.0) == 'f088_n300'
+          assert parse_grid('0,0.02,0.088,0.14') == [0.0, 0.02, 0.088, 0.14]
+          print('PREFLIGHT_PASS', camb.__version__)
+          PY
+
+  grid:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 9
+      matrix:
+        include:
+          - {n: "2.8", code: "280"}
+          - {n: "2.9", code: "290"}
+          - {n: "3.0", code: "300"}
+          - {n: "3.1", code: "310"}
+          - {n: "3.2", code: "320"}
+          - {n: "3.4", code: "340"}
+          - {n: "3.7", code: "370"}
+          - {n: "4.1", code: "410"}
+          - {n: "4.5", code: "450"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned CAMB runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip wheel
+          python -m pip install 'numpy==2.1.3' 'scipy==1.14.1' 'camb==1.6.6'
+      - name: Generate exact physical row
+        run: |
+          set -euo pipefail
+          mkdir -p results/row
+          timeout --signal=INT --kill-after=60s 135m \
+            python -m peer_fn_profile.generate_grid \
+              --output results/row \
+              --n "${{ matrix.n }}" \
+              --f-grid "0,0.02,0.04,0.06,0.08,0.088,0.10,0.12,0.14" \
+              --lmax 3000 \
+            |& tee results/row/generation_n${{ matrix.code }}.log
+      - name: Validate row contract
+        env:
+          N_CODE: ${{ matrix.code }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import numpy as np
+          root = Path('results/row')
+          code = os.environ['N_CODE']
+          npz_files = sorted(root.glob(f'f*_n{code}.npz'))
+          json_files = sorted(root.glob(f'f*_n{code}.json'))
+          assert len(npz_files) == 9, (code, len(npz_files))
+          assert len(json_files) == 9, (code, len(json_files))
+          for path in npz_files:
+              with np.load(path) as payload:
+                  assert np.array_equal(payload['ell'], np.arange(3001))
+                  assert payload['lensed'].shape[0] == 3001
+                  assert payload['lensed'].shape[1] >= 4
+                  assert np.all(np.isfinite(payload['lensed']))
+          contract = json.loads(next(root.glob(f'row_n{code}_contract.json')).read_text())
+          assert contract['completion'] == 'ROW_COMPLETE'
+          assert contract['point_count'] == 9
+          print('ROW_CONTRACT_PASS', code)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peer-fn-row-n${{ matrix.code }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/row
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
+
+  package:
+    needs: grid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: peer-fn-row-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/grid
+          merge-multiple: true
+      - name: Validate complete exact grid
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('results/grid')
+          npz_files = sorted(root.glob('f*_n*.npz'))
+          json_files = sorted(root.glob('f*_n*.json'))
+          contracts = sorted(root.glob('row_n*_contract.json'))
+          assert len(npz_files) == 81, f'expected 81 spectra, found {len(npz_files)}'
+          assert len(json_files) == 81, f'expected 81 metadata files, found {len(json_files)}'
+          assert len(contracts) == 9, f'expected 9 row contracts, found {len(contracts)}'
+          coordinates = set()
+          for path in json_files:
+              meta = json.loads(path.read_text())
+              pair = (float(meta['config']['fde_zc']), float(meta['config']['n']))
+              assert pair not in coordinates, pair
+              coordinates.add(pair)
+              assert meta['camb_version'] == '1.6.6'
+          assert len(coordinates) == 81
+          manifest = {
+              'test_id': 'T-FN-001',
+              'objective': 'Generate the exact physical CAMB f_PEER-n grid for the Planck profile.',
+              'commit': os.environ['COMMIT_SHA'],
+              'workflow_run_id': os.environ['WORKFLOW_RUN_ID'],
+              'workflow_run_attempt': os.environ['WORKFLOW_RUN_ATTEMPT'],
+              'state': 'EXACT_GRID_COMPLETED_AND_VALIDATED',
+              'spectra_count': len(npz_files),
+              'metadata_count': len(json_files),
+              'row_contract_count': len(contracts),
+          }
+          (root/'GRID_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True))
+          hashes=[]
+          for path in sorted(root.iterdir()):
+              if path.is_file() and path.name != 'ALL_FILES.sha256':
+                  hashes.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (root/'ALL_FILES.sha256').write_text('\n'.join(hashes)+'\n')
+          print('FULL_GRID_CONTRACT_PASS', json.dumps(manifest, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peer-fn-exact-grid-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/grid
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
