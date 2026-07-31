@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y gfortran
-          python -m pip install --upgrade pip wheel setuptools numpy
+          python -m pip install --upgrade pip wheel setuptools numpy scipy
 
       - name: Download and verify official CAMB 1.6.6 source
         run: |
