@@ -1,0 +1,43 @@
+{
+  "program": "PEER f_PEER x n follow-up",
+  "state": "COMPLETED_AND_VALIDATED_FOR_EXACT_GRID_LOCAL_GEOMETRY",
+  "status": "LOCAL_N3_MODE_ROBUST_NO_PLANCK_ONLY_DETECTION",
+  "T-FN-002": {
+    "status": "LOCAL_N3_POSTERIOR_MODE_ROBUST_WIDTH_BASIS_SENSITIVE",
+    "map_f_range_three_basis": [0.069, 0.08600000000000001],
+    "map_n_range_three_basis": [3.0, 3.02],
+    "intersection_68_f_three_basis": [0.051356033494548405, 0.08695737086142935],
+    "intersection_68_n_three_basis": [2.939858965590197, 3.2619167621077647]
+  },
+  "T-FN-003": {
+    "status": "NO_BASIS_ROBUST_NULL_REJECTION",
+    "initial_p_envelope": [0.00581999418000582, 0.0958019041980958],
+    "initial_conservative_p": 0.0958019041980958
+  },
+  "T-FN-004": {
+    "status": "SMOOTH_TANGENT_GEOMETRY_NO_ROBUST_NULL_REJECTION",
+    "basis_count": 11,
+    "new_exact_tangent_bases": 8,
+    "new_derivative_spectra": 112,
+    "mocks": 22000000,
+    "final_p_envelope": [0.00003999996000004, 0.09592790407209593],
+    "conservative_p": 0.09592790407209593,
+    "conservative_z_one_sided": 1.3051087839307223,
+    "basis_robust_rejection_5_percent": false,
+    "map_f_range": [0.065, 0.08600000000000001],
+    "map_n_range": [3.0, 3.0599999999999996],
+    "intersection_68_f": [0.053323405043188415, 0.08507560321688298],
+    "intersection_68_n": [2.9434340403760446, 3.2619167621077647],
+    "cubic_geometry_r2": 0.9989481827342515,
+    "max_standardized_residual": 1.7295261593502327
+  },
+  "cumulative_execution": {
+    "exact_parent_spectra": 81,
+    "new_exact_derivative_spectra": 112,
+    "total_mock_draws": 28000000,
+    "fresh_tests_passed": 7,
+    "fresh_tests_failed": 0
+  },
+  "claim_boundary": "The f_PEER-n surface uses continuous interpolation of 81 exact CAMB spectra and exact local CAMB tangent bases for analytic nuisance marginalization. It is not a full exact-CAMB chain at every posterior state.",
+  "reproducibility_package_sha256": "22a53924bc622d159f34f9a8fe7973328b06f8d6636f240a988ba8e57f341e42"
+}
