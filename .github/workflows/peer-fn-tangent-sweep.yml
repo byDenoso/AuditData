@@ -1,0 +1,152 @@
+name: PEER f-n exact tangent sweep
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'fn_tangent/**'
+      - '.github/workflows/peer-fn-tangent-sweep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.12'
+  PYTHONPATH: ${{ github.workspace }}
+  OMP_NUM_THREADS: '2'
+  OPENBLAS_NUM_THREADS: '2'
+  MKL_NUM_THREADS: '2'
+
+jobs:
+  tangent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {anchor: "f020_n300", f: "0.02", n: "3.0"}
+          - {anchor: "f040_n300", f: "0.04", n: "3.0"}
+          - {anchor: "f080_n290", f: "0.08", n: "2.9"}
+          - {anchor: "f080_n300", f: "0.08", n: "3.0"}
+          - {anchor: "f080_n340", f: "0.08", n: "3.4"}
+          - {anchor: "f100_n300", f: "0.10", n: "3.0"}
+          - {anchor: "f120_n300", f: "0.12", n: "3.0"}
+          - {anchor: "f140_n300", f: "0.14", n: "3.0"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned CAMB runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip wheel
+          python -m pip install 'numpy==2.1.3' 'scipy==1.14.1' 'camb==1.6.6'
+          python - <<'PY'
+          import camb, numpy, scipy
+          assert camb.__version__ == '1.6.6'
+          print('RUNTIME_PASS', camb.__version__, numpy.__version__, scipy.__version__)
+          PY
+      - name: Generate exact tangent basis
+        run: |
+          set -euo pipefail
+          mkdir -p results/${{ matrix.anchor }}
+          timeout --signal=INT --kill-after=60s 135m \
+            python -m fn_tangent.generate \
+              --output results/${{ matrix.anchor }} \
+              --anchor-name "${{ matrix.anchor }}" \
+              --f-peer "${{ matrix.f }}" \
+              --n "${{ matrix.n }}" \
+              --lmax 3000 \
+            |& tee results/${{ matrix.anchor }}/generation.log
+      - name: Validate tangent contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          import numpy as np
+          root = Path('results/${{ matrix.anchor }}')
+          npz = sorted(root.glob('deriv_*.npz'))
+          meta = sorted(root.glob('deriv_*.json'))
+          assert len(npz) == 14, len(npz)
+          assert len(meta) == 14, len(meta)
+          for path in npz:
+              with np.load(path) as payload:
+                  assert np.array_equal(payload['ell'], np.arange(3001))
+                  assert payload['lensed'].shape == (3001, 4)
+                  assert np.all(np.isfinite(payload['lensed']))
+          contract = json.loads((root / 'generation_contract.json').read_text())
+          assert contract['state'] == 'TANGENT_BASIS_COMPLETED_AND_VALIDATED'
+          assert contract['derivative_spectra'] == 14
+          hashes = []
+          for path in sorted(root.iterdir()):
+              if path.is_file() and path.name != 'FILES.sha256':
+                  hashes.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (root / 'FILES.sha256').write_text('\n'.join(hashes) + '\n')
+          print('TANGENT_CONTRACT_PASS', contract['anchor_name'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peer-fn-tangent-sweep-${{ matrix.anchor }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/${{ matrix.anchor }}
+          if-no-files-found: error
+          retention-days: 30
+
+  package:
+    needs: tangent
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: peer-fn-tangent-sweep-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/tangents
+      - name: Validate complete sweep
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('results/tangents')
+          anchors = sorted(path for path in root.iterdir() if path.is_dir())
+          assert len(anchors) == 8, anchors
+          contracts = []
+          for anchor in anchors:
+              assert len(list(anchor.glob('deriv_*.npz'))) == 14
+              assert len(list(anchor.glob('deriv_*.json'))) == 14
+              contract = json.loads((anchor / 'generation_contract.json').read_text())
+              assert contract['state'] == 'TANGENT_BASIS_COMPLETED_AND_VALIDATED'
+              contracts.append(contract)
+          manifest = {
+              'test_id': 'T-FN-004',
+              'objective': 'Map tangent-basis sensitivity along the exact PEER f-n ridge.',
+              'state': 'EIGHT_EXACT_TANGENT_BASES_COMPLETED_AND_VALIDATED',
+              'commit': os.environ['COMMIT_SHA'],
+              'workflow_run_id': os.environ['WORKFLOW_RUN_ID'],
+              'workflow_run_attempt': os.environ['WORKFLOW_RUN_ATTEMPT'],
+              'anchors': [contract['anchor'] for contract in contracts],
+              'anchor_names': [contract['anchor_name'] for contract in contracts],
+              'derivative_spectra': 112,
+              'camb_version': '1.6.6',
+          }
+          (root / 'SWEEP_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True))
+          hashes = []
+          for path in sorted(root.rglob('*')):
+              if path.is_file() and path.name != 'ALL_FILES.sha256':
+                  hashes.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root)}")
+          (root / 'ALL_FILES.sha256').write_text('\n'.join(hashes) + '\n')
+          print('SWEEP_PACKAGE_PASS', json.dumps(manifest, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peer-fn-tangent-sweep-complete-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/tangents
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
