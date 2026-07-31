@@ -69,6 +69,7 @@ def make_params(
     lmax: int,
     fluid_params: dict[str, float] | None = None,
     want_cls: bool = True,
+    do_lensing: bool = True,
 ):
     camb, AxionEffectiveFluid, EarlyQuintessence = import_camb()
     pars = camb.CAMBparams()
@@ -113,6 +114,7 @@ def make_params(
     pars.NonLinear = camb.model.NonLinear_none
     if want_cls:
         pars.set_for_lmax(lmax, lens_potential_accuracy=0)
+        pars.DoLensing = do_lensing
         pars.Accuracy.AccuracyBoost = 1.2
         pars.Accuracy.lAccuracyBoost = 1.2
         pars.Accuracy.lSampleBoost = 1.2
@@ -142,13 +144,25 @@ def run_spectrum(
     model: str,
     lmax: int,
     fluid_params: dict[str, float] | None = None,
+    do_lensing: bool = True,
 ) -> dict[str, Any]:
     camb, _, _ = import_camb()
-    pars = make_params(config, model=model, lmax=lmax, fluid_params=fluid_params, want_cls=True)
+    pars = make_params(
+        config,
+        model=model,
+        lmax=lmax,
+        fluid_params=fluid_params,
+        want_cls=True,
+        do_lensing=do_lensing,
+    )
     results = camb.get_results(pars)
-    lensed = np.asarray(results.get_lensed_scalar_cls(lmax=lmax, CMB_unit="muK", raw_cl=True))
     unlensed = np.asarray(results.get_unlensed_scalar_cls(lmax=lmax, CMB_unit="muK", raw_cl=True))
-    lens = np.asarray(results.get_lens_potential_cls(lmax=lmax, raw_cl=True))
+    if do_lensing:
+        lensed = np.asarray(results.get_lensed_scalar_cls(lmax=lmax, CMB_unit="muK", raw_cl=True))
+        lens = np.asarray(results.get_lens_potential_cls(lmax=lmax, raw_cl=True))
+    else:
+        lensed = unlensed.copy()
+        lens = np.zeros((lmax + 1, 3), dtype=float)
     z_background = np.unique(np.concatenate(([0.0], np.logspace(-1, 5.2, 360))))
     background = background_from_results(results, z_background)
     arrays = {
@@ -174,6 +188,8 @@ def run_spectrum(
         "fluid_params": fluid_params,
         "derived": background["derived"],
         "nonlinear_mode": "NonLinear_none",
+        "do_lensing": do_lensing,
+        "lensing_arrays_available": do_lensing,
     }
     (output_dir / f"{label}.json").write_text(json.dumps(json_safe(metadata), indent=2, sort_keys=True), encoding="utf-8")
     print("MODEL_COMPLETE", label, json.dumps(metadata["derived"], sort_keys=True), flush=True)
@@ -194,7 +210,14 @@ def fit_effective_fluid(config: CanonicalConfig, target_npz: Path, lmax: int) ->
 
     def residual(x: np.ndarray) -> np.ndarray:
         fluid_params = {"zc": 10.0 ** float(x[0]), "fde_zc": float(x[1])}
-        pars = make_params(config, "fluid", lmax=lmax, fluid_params=fluid_params, want_cls=False)
+        pars = make_params(
+            config,
+            "fluid",
+            lmax=lmax,
+            fluid_params=fluid_params,
+            want_cls=False,
+            do_lensing=False,
+        )
         results = camb.get_background(pars)
         omega = np.asarray(results.get_Omega("de", z=z_fit), dtype=float)
         if np.any(~np.isfinite(omega)) or np.any(omega <= 0):
@@ -259,6 +282,7 @@ def generate_stock(output_dir: Path, lmax: int) -> None:
                 "lmax": lmax,
                 "mode": "stock",
                 "nonlinear_mode": "NonLinear_none",
+                "exact_ablation_spectrum": "unlensed TT/TE/EE",
             },
             indent=2,
             sort_keys=True,
@@ -269,7 +293,14 @@ def generate_stock(output_dir: Path, lmax: int) -> None:
 
 def generate_nopert(output_dir: Path, lmax: int) -> None:
     config = CanonicalConfig()
-    run_spectrum(output_dir, "scalar_n30_nopert", config, "scalar", lmax)
+    run_spectrum(
+        output_dir,
+        "scalar_n30_nopert",
+        config,
+        "scalar",
+        lmax,
+        do_lensing=False,
+    )
     (output_dir / "nopert_contract.json").write_text(
         json.dumps(
             {
@@ -278,6 +309,9 @@ def generate_nopert(output_dir: Path, lmax: int) -> None:
                 "lmax": lmax,
                 "mode": "nopert",
                 "nonlinear_mode": "NonLinear_none",
+                "do_lensing": False,
+                "exact_ablation_spectrum": "unlensed TT/TE/EE",
+                "reason": "A no-perturbation scalar counterfactual has no self-consistent lensing normalization in CAMB.",
             },
             indent=2,
             sort_keys=True,
