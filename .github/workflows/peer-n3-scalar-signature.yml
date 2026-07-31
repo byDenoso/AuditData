@@ -99,7 +99,7 @@ jobs:
       - name: Extract nuisance-projected n3 fingerprint
         run: |
           set -euo pipefail
-          python -m peer_n3_signature.analyze \
+          python -m peer_n3_signature.analyze_unlensed \
             --input results/n3_signature/spectra \
             --output results/n3_signature/fingerprint \
             |& tee results/n3_signature/analysis.log
@@ -139,6 +139,7 @@ jobs:
           result = json.loads((fingerprint / 'signature_metrics.json').read_text(encoding='utf-8'))
           assert result['test_id'] == 'T-N3-003'
           assert result['evidence_class'] == 'EXACT_BACKGROUND_CAMB_PERTURBATION_ABLATION'
+          assert result['exact_ablation_space'] == 'unlensed TT/TE/EE'
           assert result['status'] in {
               'DISTINCT_N3_SCALAR_PERTURBATION_FINGERPRINT',
               'SCALAR_PERTURBATION_RESPONSE_NOT_N3_SPECIFIC',
@@ -149,6 +150,7 @@ jobs:
               assert float(value) <= 2e-9, (key, value)
           assert math.isfinite(float(result['projected_cv_norm_ell30_3000']))
           assert 0 <= float(result['survival_fraction']) <= 1.000001
+          assert result['lensing_control']['exact_no_perturbation_lensing_available'] is False
           assert 'not Planck, ACT or SPT likelihood significances' in result['claim_boundary']
           report = (fingerprint / 'REPORT.md').read_text(encoding='utf-8')
           assert 'not an observed detection' in report
