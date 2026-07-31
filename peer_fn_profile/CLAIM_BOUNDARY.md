@@ -1,0 +1,1 @@
+T-FN-001 constrains the geometry of the Planck likelihood in the exact physical coordinates f_PEER and n at fixed zc and theta_i, while profiling a local bounded standard-cosmology basis. It is not a calibrated discovery significance and does not by itself compare a fully sampled PEER posterior with LambdaCDM.
