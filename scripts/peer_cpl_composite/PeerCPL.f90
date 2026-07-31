@@ -22,7 +22,6 @@
         real(dl), private :: grhov0 = 0._dl
         integer, private :: peer_eqs = 0
         integer, private :: late_eqs = 0
-        class(CAMBdata), pointer, private :: CompositeState => null()
     contains
         procedure :: Init => TPeerCPL_Init
         procedure :: BackgroundDensityAndPressure => TPeerCPL_BackgroundDensityAndPressure
@@ -65,9 +64,9 @@
     class(TCAMBdata), intent(in), target :: State
     logical late_is_lambda
 
+    call this%TQuintessence%Init(State)
     select type(State)
     class is (CAMBdata)
-        this%CompositeState => State
         this%grhov0 = State%grhov
     class default
         call MpiStop('PeerCPL requires CAMBdata state')
@@ -82,7 +81,7 @@
         this%peer_eqs = 2
     end if
 
-    late_is_lambda = (.not. this%cpl_enabled) .or. &
+    late_is_lambda = this%cpl_enabled .and. &
         (abs(this%w + 1._dl) < 1e-12_dl .and. abs(this%wa) < 1e-12_dl)
     if (this%cpl_enabled .and. .not. late_is_lambda) then
         this%late_eqs = 1
@@ -109,6 +108,10 @@
     end if
 
     wlate = this%w + this%wa * (1._dl - a)
+    if (a <= 0._dl) then
+        grhov_t = 0._dl
+        return
+    end if
     rel = a ** (1._dl - 3._dl * this%w - 3._dl * this%wa)
     if (this%wa /= 0._dl) rel = rel * exp(-3._dl * this%wa * (1._dl - a))
     grhov_t = this%grhov0 * rel / (a * a)
@@ -121,7 +124,7 @@
     real(dl), intent(out) :: grhov_t, wpeer
 
     if (this%peer_eqs > 0) then
-        call this%TQuintessence%BackgroundDensityAndPressure(this%grhov0, a, grhov_t, wpeer)
+        call this%TEarlyQuintessence%BackgroundDensityAndPressure(this%grhov0, a, grhov_t, wpeer)
     else
         grhov_t = 0._dl
         wpeer = -1._dl
@@ -129,23 +132,23 @@
     end subroutine PeerBackground
 
 
-    subroutine TPeerCPL_BackgroundDensityAndPressure(this, grhov, a, grhov_t, wtot)
+    subroutine TPeerCPL_BackgroundDensityAndPressure(this, grhov, a, grhov_t, w)
     class(TPeerCPL), intent(inout) :: this
     real(dl), intent(in) :: grhov, a
     real(dl), intent(out) :: grhov_t
-    real(dl), optional, intent(out) :: wtot
+    real(dl), optional, intent(out) :: w
     real(dl) peer_rho, late_rho, peer_w, late_w, pressure
 
     call this%PeerBackground(a, peer_rho, peer_w)
     call this%LateBackground(a, late_rho, late_w)
     grhov_t = peer_rho + late_rho
 
-    if (present(wtot)) then
+    if (present(w)) then
         if (grhov_t > tiny(1._dl)) then
             pressure = peer_w * peer_rho + late_w * late_rho
-            wtot = pressure / grhov_t
+            w = pressure / grhov_t
         else
-            wtot = -1._dl
+            w = -1._dl
         end if
     end if
     end subroutine TPeerCPL_BackgroundDensityAndPressure
@@ -154,10 +157,9 @@
     subroutine TPeerCPL_EvolveBackground(this, num, a, y, yprime)
     ! Exact scalar-background evolution in the presence of the late CPL density.
     ! Variables are phi=y(1), a^2 phi'=y(2), matching TQuintessence.
-    class(TPeerCPL), intent(in) :: this
-    integer, intent(in) :: num
-    real(dl), intent(in) :: a, y(num)
-    real(dl), intent(out) :: yprime(num)
+    class(TPeerCPL) :: this
+    integer :: num
+    real(dl) :: a, y(num), yprime(num)
     real(dl) a2, phi, phidot, grho_peer_a4, grho_late_t, wlate, total, adot
 
     a2 = a * a
@@ -165,7 +167,7 @@
     phidot = y(2) / a2
     grho_peer_a4 = a2 * (0.5_dl * phidot**2 + a2 * this%Vofphi(phi, 0))
     call this%LateBackground(a, grho_late_t, wlate)
-    total = this%CompositeState%grho_no_de(a) + grho_peer_a4 + grho_late_t * a2
+    total = this%State%grho_no_de(a) + grho_peer_a4 + grho_late_t * a2
     adot = sqrt(total / 3._dl)
     yprime(1) = phidot / adot
     yprime(2) = -a2**2 * this%Vofphi(phi, 1) / adot
@@ -175,7 +177,7 @@
     subroutine PeerPerturbations(this, a, k, y, w_ix, dgrho_peer, dgq_peer)
     class(TPeerCPL), intent(in) :: this
     real(dl), intent(in) :: a, k
-    real(dl), intent(in) :: y(:)
+    real(dl), intent(in) :: y(*)
     integer, intent(in) :: w_ix
     real(dl), intent(out) :: dgrho_peer, dgq_peer
     real(dl) phi, phidot, clxq, vq
@@ -195,10 +197,10 @@
 
 
     subroutine TPeerCPL_PerturbedStressEnergy(this, dgrhoe, dgqe, &
-        a, dgq, dgrho, grho, grhov_t, wtot, gpres_noDE, etak, adotoa, k, kf1, ay, ayprime, w_ix)
+        a, dgq, dgrho, grho, grhov_t, w, gpres_noDE, etak, adotoa, k, kf1, ay, ayprime, w_ix)
     class(TPeerCPL), intent(inout) :: this
     real(dl), intent(out) :: dgrhoe, dgqe
-    real(dl), intent(in) :: a, dgq, dgrho, grho, grhov_t, wtot, gpres_noDE, &
+    real(dl), intent(in) :: a, dgq, dgrho, grho, grhov_t, w, gpres_noDE, &
         etak, adotoa, k, kf1
     real(dl), intent(in) :: ay(*)
     real(dl), intent(inout) :: ayprime(*)
@@ -258,23 +260,23 @@
     end subroutine TPeerCPL_PerturbedStressEnergy
 
 
-    subroutine TPeerCPL_PerturbationEvolve(this, ayprime, wtot, w_ix, a, adotoa, k, z, y)
+    subroutine TPeerCPL_PerturbationEvolve(this, ayprime, w, w_ix, a, adotoa, k, z, y)
     class(TPeerCPL), intent(in) :: this
     real(dl), intent(inout) :: ayprime(:)
-    real(dl), intent(in) :: wtot, a, adotoa, k, z, y(:)
+    real(dl), intent(in) :: w, a, adotoa, k, z, y(:)
     integer, intent(in) :: w_ix
 
     if (this%peer_eqs > 0) then
-        call this%TQuintessence%PerturbationEvolve(ayprime, wtot, w_ix, a, adotoa, k, z, y)
+        call this%TEarlyQuintessence%PerturbationEvolve(ayprime, w, w_ix, a, adotoa, k, z, y)
     end if
     ! The PPF Gamma derivative is set in PerturbedStressEnergy, as in TDarkEnergyPPF.
     end subroutine TPeerCPL_PerturbationEvolve
 
 
-    function TPeerCPL_diff_rhopi_Add_Term(this, a, dgrhoe, dgqe, grho, gpres, wtot, &
+    function TPeerCPL_diff_rhopi_Add_Term(this, a, dgrhoe, dgqe, grho, gpres, w, &
         grhok, adotoa, Kf1, k, grhov_t, z, k2, yprime, y, w_ix) result(ppiedot)
     class(TPeerCPL), intent(in) :: this
-    real(dl), intent(in) :: a, dgrhoe, dgqe, grho, gpres, wtot, grhok, adotoa, &
+    real(dl), intent(in) :: a, dgrhoe, dgqe, grho, gpres, w, grhok, adotoa, &
         Kf1, k, grhov_t, z, k2, yprime(:), y(:)
     integer, intent(in) :: w_ix
     real(dl) ppiedot, hdotoh
@@ -302,17 +304,17 @@
     end function TPeerCPL_diff_rhopi_Add_Term
 
 
-    subroutine TPeerCPL_Effective_w_wa(this, weff, waeff)
+    subroutine TPeerCPL_Effective_w_wa(this, w, wa)
     class(TPeerCPL), intent(inout) :: this
-    real(dl), intent(out) :: weff, waeff
+    real(dl), intent(out) :: w, wa
 
     if (this%cpl_enabled) then
-        weff = this%w
-        waeff = this%wa
+        w = this%w
+        wa = this%wa
     else
-        weff = -1._dl
-        waeff = 0._dl
+        w = -1._dl
+        wa = 0._dl
     end if
-    end suboutine TPeerCPL_Effective_w_wa
+    end subroutine TPeerCPL_Effective_w_wa
 
-    end module PeerCPLS
+    end module PeerCPL
