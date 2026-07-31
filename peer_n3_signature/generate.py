@@ -110,8 +110,9 @@ def make_params(
     pars.WantCls = want_cls
     pars.Want_CMB = want_cls
     pars.WantTransfer = False
+    pars.NonLinear = camb.model.NonLinear_none
     if want_cls:
-        pars.set_for_lmax(lmax, lens_potential_accuracy=1)
+        pars.set_for_lmax(lmax, lens_potential_accuracy=0)
         pars.Accuracy.AccuracyBoost = 1.2
         pars.Accuracy.lAccuracyBoost = 1.2
         pars.Accuracy.lSampleBoost = 1.2
@@ -172,6 +173,7 @@ def run_spectrum(
         "zc": config.zc,
         "fluid_params": fluid_params,
         "derived": background["derived"],
+        "nonlinear_mode": "NonLinear_none",
     }
     (output_dir / f"{label}.json").write_text(json.dumps(json_safe(metadata), indent=2, sort_keys=True), encoding="utf-8")
     print("MODEL_COMPLETE", label, json.dumps(metadata["derived"], sort_keys=True), flush=True)
@@ -256,6 +258,7 @@ def generate_stock(output_dir: Path, lmax: int) -> None:
                 "derivative_steps": DERIVATIVE_STEPS,
                 "lmax": lmax,
                 "mode": "stock",
+                "nonlinear_mode": "NonLinear_none",
             },
             indent=2,
             sort_keys=True,
@@ -268,7 +271,17 @@ def generate_nopert(output_dir: Path, lmax: int) -> None:
     config = CanonicalConfig()
     run_spectrum(output_dir, "scalar_n30_nopert", config, "scalar", lmax)
     (output_dir / "nopert_contract.json").write_text(
-        json.dumps({"canonical_config": asdict(config), "zc": config.zc, "lmax": lmax, "mode": "nopert"}, indent=2, sort_keys=True),
+        json.dumps(
+            {
+                "canonical_config": asdict(config),
+                "zc": config.zc,
+                "lmax": lmax,
+                "mode": "nopert",
+                "nonlinear_mode": "NonLinear_none",
+            },
+            indent=2,
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
 
