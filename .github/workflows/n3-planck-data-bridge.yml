@@ -1,0 +1,47 @@
+name: N3 Planck plik-lite data bridge
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/n3-planck-data-bridge.yml'
+      - 'planck_data_bridge_trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned Planck 2018 plik-lite native data
+        run: |
+          set -euo pipefail
+          mkdir -p bridge/output
+          curl -fL --retry 5 --retry-delay 3 \
+            https://github.com/CobayaSampler/planck_native_data/releases/download/v1/plik_lite_2018_AL.zip \
+            -o bridge/plik_lite_2018_AL.zip
+          unzip -q bridge/plik_lite_2018_AL.zip -d bridge/output
+          cat > bridge/output/TRANSPORT_PROVENANCE.json <<'JSON'
+          {
+            "transport_only": true,
+            "source_repository": "https://github.com/CobayaSampler/planck_native_data",
+            "release": "v1",
+            "asset": "plik_lite_2018_AL.zip",
+            "likelihood": "planck_2018_highl_plik.TTTEEE_lite_native",
+            "cobaya_reference_commit": "1e084e54c297ff0b80784df49dc16b46780d98b2"
+          }
+          JSON
+          find bridge/output -type f -print0 | sort -z | xargs -0 sha256sum > bridge/output/FILES.sha256
+          find bridge/output -maxdepth 4 -type f | sort
+          du -sh bridge/output
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n3-planck-pliklite-data-${{ github.run_id }}
+          path: bridge/output
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 6
