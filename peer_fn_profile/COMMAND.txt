@@ -1,0 +1,1 @@
+python -m peer_fn_profile.generate_grid --output results/row --n <matrix_n> --f-grid 0,0.02,0.04,0.06,0.08,0.088,0.10,0.12,0.14 --lmax 3000
