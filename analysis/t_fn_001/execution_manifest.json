@@ -1,0 +1,49 @@
+{
+  "test_id": "T-FN-001",
+  "objective": "Test whether profiling f_PEER exposes a hidden shift of the preferred native index n away from 3 in the Planck likelihood.",
+  "state": "COMPLETED_VALIDATED_WITH_TANGENT_BASIS_ROBUSTNESS",
+  "decision": "LOCAL_N3_BASIN_ROBUST_NULL_DELTA_BASIS_SENSITIVE",
+  "model": "CAMB 1.6.6 EarlyQuintessence",
+  "dataset": "Planck 2018 TTTEEE plik-lite v22, 613 bandpowers",
+  "grid": {
+    "f_PEER": [0.0, 0.02, 0.04, 0.06, 0.08, 0.088, 0.10, 0.12, 0.14],
+    "n": [2.8, 2.9, 3.0, 3.1, 3.2, 3.4, 3.7, 4.1, 4.5]
+  },
+  "profiled_parameters": ["lnAs", "ns", "ombh2", "omch2", "tau", "H0", "Alens", "A_planck"],
+  "fixed": {"log10_zc": 3.81, "theta_i": 2.89155},
+  "priors": {
+    "tau": {"mean": 0.054, "sigma": 0.0073},
+    "A_planck": {"mean": 1.0, "sigma": 0.0025}
+  },
+  "completion_metrics": {
+    "exact_spectra": 81,
+    "valid_grid_fits": 243,
+    "starts_per_cell": 10,
+    "optimization_attempts": 2430,
+    "unit_tests_passed": 19,
+    "unit_tests_failed": 0
+  },
+  "robust_result": {
+    "best_f_PEER_range": [0.06, 0.088],
+    "best_n": 3.0,
+    "f68_intersection": [0.08, 0.10],
+    "n68_intersection": [2.9, 3.1],
+    "canonical_delta_chi2_range": [0.0, 0.245697749429155],
+    "null_observed_delta_chi2_range": [3.400427637002167, 8.474159171628457],
+    "global_n95_closed": false
+  },
+  "claim_boundary": "No calibrated p-value or sigma: n is unidentified at f_PEER=0, the null is a boundary point, and the standard-cosmology profile is locally linearized.",
+  "provenance": {
+    "generator_lineage_commit": "16d1df948ba17762ff430b9de293cba799ed1e7e",
+    "grid_pr": 15,
+    "grid_run_id": 30664736113,
+    "grid_artifact_id": 8806572789,
+    "grid_artifact_digest": "sha256:2886844df210866fd3afda063bcd37b85ea169a5d8f2ea9bc9624eb0d84031e4",
+    "tangent_pr": 16,
+    "tangent_run_id": 30665307777,
+    "tangent_artifact_id": 8806742786,
+    "tangent_artifact_digest": "sha256:887ed2347ad2fb8b80b79819409cbfaa259b0b4b40bca5b2b43afe627692a46a",
+    "reproducibility_package_sha256": "0504024491f9ce39c469cf5cecd869002079455b4e3548149e0b3077535ccd6e"
+  },
+  "next_gate": "Full nonlinear n-free sampling with exact CAMB updates across the f-n ridge, followed by boundary-null calibration with mocks."
+}
