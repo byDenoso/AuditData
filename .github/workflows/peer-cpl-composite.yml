@@ -58,6 +58,17 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/peer_cpl_composite/apply_peer_cpl_patch.py build/source/camb-1.6.6
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('build/source/camb-1.6.6/fortran/PeerCPL.f90')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('wtot', 'w').replace('weff', 'w').replace('waeff', 'wa')
+          text = text.replace(
+              'late_is_lambda = (.not. this%cpl_enabled) .or. &',
+              'late_is_lambda = this%cpl_enabled .and. &',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
           grep -q 'module PeerCPL' build/source/camb-1.6.6/fortran/PeerCPL.f90
           grep -q 'EvolveBackgroundDispatch' build/source/camb-1.6.6/fortran/DarkEnergyQuintessence.f90
           grep -q 'class PeerCPL' build/source/camb-1.6.6/camb/dark_energy.py
