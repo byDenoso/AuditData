@@ -9,70 +9,42 @@ def replace_once(path: Path, old: str, new: str) -> None:
     text = path.read_text(encoding="utf-8")
     count = text.count(old)
     if count != 1:
-        raise RuntimeError(f"{path}: expected exactly one match, found {count}: {old[:120]!r}")
+        raise RuntimeError(
+            f"{path}: expected exactly one match, found {count}: {old[:120]!r}"
+        )
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
-def replace_source_once(text: str, old: str, new: str, *, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"PeerCPL source: expected one {label}, found {count}")
-    return text.replace(old, new, 1)
+def canonical_peer_source(path: Path) -> str:
+    """Return the already-normalized composite source or fail closed.
 
-
-def normalized_peer_source(path: Path) -> str:
+    PeerCPL.f90 is the canonical source. The patcher must not silently rewrite it,
+    because doing so made local and GitHub builds execute different code.
+    """
     text = path.read_text(encoding="utf-8")
-    repairs = {
-        "end suboutine TPeerCPL_Effective_w_wa": "end subroutine TPeerCPL_Effective_w_wa",
-        "end module PeerCPLS": "end module PeerCPL",
-        "this%TQuintessence%BackgroundDensityAndPressure": (
-            "this%TEarlyQuintessence%BackgroundDensityAndPressure"
-        ),
-        "this%TQuintessence%PerturbationEvolve": (
-            "this%TEarlyQuintessence%PerturbationEvolve"
-        ),
-    }
-    for old, new in repairs.items():
-        text = replace_source_once(text, old, new, label=old)
-
-    text = replace_source_once(
-        text,
-        "subroutine TPeerCPL_EvolveBackground(this, num, a, y, yprime)\n"
-        "    ! Exact scalar-background evolution in the presence of the late CPL density.\n"
-        "    ! Variables are phi=y(1), a^2 phi'=y(2), matching TQuintessence.\n"
-        "    class(TPeerCPL), intent(in) :: this\n"
-        "    integer, intent(in) :: num\n"
-        "    real(dl), intent(in) :: a, y(num)\n"
-        "    real(dl), intent(out) :: yprime(num)",
-        "subroutine TPeerCPL_EvolveBackground(this, num, a, y, yprime)\n"
-        "    ! Exact scalar-background evolution in the presence of the late CPL density.\n"
-        "    ! Variables are phi=y(1), a^2 phi'=y(2), matching TQuintessence.\n"
-        "    class(TPeerCPL) :: this\n"
-        "    integer :: num\n"
-        "    real(dl) :: a, y(num), yprime(num)",
-        label="EvolveBackground override interface",
+    required = (
+        "module PeerCPL",
+        "type, extends(TEarlyQuintessence) :: TPeerCPL",
+        "call this%TQuintessence%Init(State)",
+        "this%State%grho_no_de(a)",
+        "if (a <= 0._dl) then",
+        "end subroutine TPeerCPL_Effective_w_wa",
+        "end module PeerCPL",
     )
-    text = replace_source_once(
-        text,
-        "subroutine PeerPerturbations(this, a, k, y, w_ix, dgrho_peer, dgq_peer)\n"
-        "    class(TPeerCPL), intent(in) :: this\n"
-        "    real(dl), intent(in) :: a, k\n"
-        "    real(dl), intent(in) :: y(:)",
-        "subroutine PeerPerturbations(this, a, k, y, w_ix, dgrho_peer, dgq_peer)\n"
-        "    class(TPeerCPL), intent(in) :: this\n"
-        "    real(dl), intent(in) :: a, k\n"
-        "    real(dl), intent(in) :: y(*)",
-        label="assumed-size perturbation helper",
-    )
-
     forbidden = (
         "end suboutine",
         "end module PeerCPLS",
-        "this%TQuintessence%BackgroundDensityAndPressure",
-        "this%TQuintessence%PerturbationEvolve",
+        "CompositeState",
+        "wtot",
+        "weff",
+        "waeff",
     )
-    if any(token in text for token in forbidden):
-        raise RuntimeError(f"{path}: invalid source token survived normalization")
+    missing = [token for token in required if token not in text]
+    surviving = [token for token in forbidden if token in text]
+    if missing or surviving:
+        raise RuntimeError(
+            f"{path}: non-canonical PeerCPL source; missing={missing}, forbidden={surviving}"
+        )
     return text
 
 
@@ -126,8 +98,9 @@ def apply(root: Path) -> None:
         if not path.exists():
             raise FileNotFoundError(path)
 
+    # Copy the exact reviewed source. No hidden source normalization is allowed.
     (fortran / "PeerCPL.f90").write_text(
-        normalized_peer_source(peer_source), encoding="utf-8"
+        canonical_peer_source(peer_source), encoding="utf-8"
     )
 
     replace_once(
@@ -137,6 +110,12 @@ def apply(root: Path) -> None:
     )
 
     patch_dynamic_quintessence_dispatch(quintessence)
+    # The derived composite EvolveBackground needs access to CAMB's state pointer.
+    replace_once(
+        quintessence,
+        "class(CAMBdata), pointer, private :: State",
+        "class(CAMBdata), pointer :: State",
+    )
 
     replace_once(
         fortran / "DarkEnergyInterface.f90",
@@ -171,6 +150,8 @@ def apply(root: Path) -> None:
     if marker not in text:
         raise RuntimeError("dark_energy.py insertion marker missing")
     fragment = (here / "peer_cpl_python.pyfrag").read_text(encoding="utf-8")
+    if "__composite_state" in fragment:
+        raise RuntimeError("Python fragment still exposes removed CompositeState pointer")
     text = text.replace(marker, fragment + marker, 1)
     old_map = 'F2003Class._class_names.update({"fluid": DarkEnergyFluid, "ppf": DarkEnergyPPF})'
     new_map = 'F2003Class._class_names.update({"fluid": DarkEnergyFluid, "ppf": DarkEnergyPPF, "peer_cpl": PeerCPL})'
@@ -179,21 +160,14 @@ def apply(root: Path) -> None:
     py.write_text(text.replace(old_map, new_map, 1), encoding="utf-8")
 
     patched_peer = (fortran / "PeerCPL.f90").read_text(encoding="utf-8")
-    required_tokens = (
-        "module PeerCPL",
-        "type, extends(TEarlyQuintessence) :: TPeerCPL",
-        "this%TEarlyQuintessence%BackgroundDensityAndPressure",
-        "this%TEarlyQuintessence%PerturbationEvolve",
-        "end subroutine TPeerCPL_Effective_w_wa",
-        "end module PeerCPL",
-    )
-    for token in required_tokens:
-        if token not in patched_peer:
-            raise RuntimeError(f"patched PeerCPL source missing {token!r}")
+    if patched_peer != canonical_peer_source(peer_source):
+        raise RuntimeError("copied PeerCPL source differs from canonical source")
 
     patched_quintessence = quintessence.read_text(encoding="utf-8")
     if patched_quintessence.count("EvolveBackgroundDispatch") != 4:
         raise RuntimeError("dynamic quintessence dispatch patch did not apply exactly")
+    if "class(CAMBdata), pointer, private :: State" in patched_quintessence:
+        raise RuntimeError("Quintessence State pointer remains private")
 
     print(f"patched CAMB source at {root}")
 
