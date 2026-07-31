@@ -20,7 +20,6 @@ class PeerCPL(EarlyQuintessence):
         ("__grhov0", c_double),
         ("__peer_eqs", c_int),
         ("__late_eqs", c_int),
-        ("__composite_state", f_pointer),
     )
 
     def set_params(
