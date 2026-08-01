@@ -1,0 +1,6 @@
+{
+  "test_id": "T-RIVAL-001-TRANSPORT",
+  "purpose": "Build and transport CAMB 1.6.6 CPython 3.13 Linux wheel for local chat execution",
+  "scientific_computation": false,
+  "merge_policy": "close_without_merge_after_artifact_retrieval"
+}
