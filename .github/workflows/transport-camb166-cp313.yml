@@ -51,11 +51,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m venv smoke
+          smoke/bin/python -m pip install 'numpy==2.1.3' 'scipy==1.14.1'
           smoke/bin/python -m pip install --no-deps dist/camb-1.6.6-*.whl
           smoke/bin/python - <<'PY'
-          import camb
+          import camb, numpy, scipy
           assert camb.__version__ == '1.6.6'
-          print('CAMB_IMPORT_PASS', camb.__version__, camb.__file__)
+          print('CAMB_IMPORT_PASS', camb.__version__, camb.__file__, numpy.__version__, scipy.__version__)
           PY
       - uses: actions/upload-artifact@v4
         with:
