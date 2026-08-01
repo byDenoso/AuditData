@@ -1,0 +1,37 @@
+{
+  "acoustic_match": {
+    "acoustic_gate_pass": true,
+    "background_identical": false,
+    "classification": "ACOUSTIC_MATCH_ONLY_NOT_BACKGROUND_IDENTICAL",
+    "fluid_rdrag": 142.83971822475675,
+    "fluid_thetastar": 1.0384540417247103,
+    "omega_history_max_abs_log_mismatch": 0.5377118147218325,
+    "omega_history_rms_log_mismatch": 0.3282340156787137,
+    "rdrag_abs_difference_mpc": 0.23380861653240004,
+    "scalar_rdrag": 143.07352684128915,
+    "scalar_thetastar": 1.0401373787363228,
+    "thetastar_relative_difference": 0.0016183795006555815
+  },
+  "decision": "NO_COHERENT_SCALAR_SPECIFIC_CMB_PREFERENCE",
+  "primary_result": {
+    "basis_count": 11,
+    "planck_delta_chi2_range": [-5.25722881498325, -3.492121515100166],
+    "act_delta_chi2_range": [2.5000080592548386, 3.778684831153072],
+    "spt_delta_chi2_range": [-0.43760131599988483, 0.22290084027959267],
+    "independent_profile_sum_range": [-2.9880888342245697, 0.5094641563324984]
+  },
+  "channel_medians": {
+    "Planck_TT": -1.5994407652151494,
+    "Planck_TE": -0.5000849412498951,
+    "Planck_EE": -4.210318378989342,
+    "ACT_TT": 1.290856226684788,
+    "ACT_TE": 0.6264206790881204,
+    "ACT_EE": 0.9896891985349257,
+    "SPT_TT": -0.27262816304975246,
+    "SPT_TE": -0.21036384046232115,
+    "SPT_EE": 0.20024091593460014
+  },
+  "state": "COMPLETED_AND_VALIDATED_LOCAL_CHAT_RUNTIME",
+  "claim_boundary": "The effective-fluid rival is approximately matched in rdrag and thetastar but not in the full background history. The negative cross-experiment result rejects a coherent universal scalar-specific signature at this diagnostic level, but is not a final native AdS-EDE or NEDE comparison.",
+  "next_gate": "Port one exact native rival with its own perturbations and nuisance tangent basis, then repeat Planck+ACT+SPT."
+}
