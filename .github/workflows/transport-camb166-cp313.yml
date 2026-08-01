@@ -1,0 +1,68 @@
+name: Transport CAMB 1.6.6 CPython 3.13 wheel
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/transport-camb166-cp313.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gfortran liblapack-dev
+          python -m pip install --upgrade pip wheel setuptools
+      - name: Build pinned CAMB wheel
+        run: |
+          set -euo pipefail
+          mkdir -p dist provenance
+          python -m pip wheel --no-deps --wheel-dir dist 'camb==1.6.6'
+          python - <<'PY'
+          import hashlib, json, pathlib, platform, sys
+          wheels=list(pathlib.Path('dist').glob('camb-1.6.6-*.whl'))
+          assert len(wheels)==1, wheels
+          wheel=wheels[0]
+          manifest={
+            'purpose':'software transport only; no scientific computation',
+            'package':'camb',
+            'version':'1.6.6',
+            'python':sys.version,
+            'platform':platform.platform(),
+            'wheel':wheel.name,
+            'sha256':hashlib.sha256(wheel.read_bytes()).hexdigest(),
+          }
+          pathlib.Path('provenance/MANIFEST.json').write_text(json.dumps(manifest,indent=2,sort_keys=True))
+          print('CAMB_WHEEL_TRANSPORT_PASS',json.dumps(manifest,sort_keys=True))
+          PY
+      - name: Smoke install wheel
+        run: |
+          set -euo pipefail
+          python -m venv smoke
+          smoke/bin/python -m pip install --no-deps dist/camb-1.6.6-*.whl
+          smoke/bin/python - <<'PY'
+          import camb
+          assert camb.__version__ == '1.6.6'
+          print('CAMB_IMPORT_PASS', camb.__version__, camb.__file__)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camb-1.6.6-cp313-linux-wheel-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/*.whl
+            provenance/MANIFEST.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
