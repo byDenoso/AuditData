@@ -1,0 +1,65 @@
+{
+  "acoustic_match": {
+    "acoustic_gate_pass": true,
+    "background_identical": false,
+    "classification": "ACOUSTIC_MATCH_ONLY_NOT_BACKGROUND_IDENTICAL",
+    "fluid_rdrag": 142.83971822475675,
+    "fluid_thetastar": 1.0384540417247103,
+    "omega_history_max_abs_log_mismatch": 0.5377118147218325,
+    "omega_history_rms_log_mismatch": 0.3282340156787137,
+    "rdrag_abs_difference_mpc": 0.23380861653240004,
+    "scalar_rdrag": 143.07352684128915,
+    "scalar_thetastar": 1.0401373787363228,
+    "thetastar_relative_difference": 0.0016183795006555815
+  },
+  "claim_boundary": "Each model is profiled with its own exact CAMB nuisance tangent basis, eliminating the principal profiling asymmetry of T-RIVAL-001. The central effective-fluid model remains only acoustically near-matched to the scalar and does not reproduce the complete background history. Cross-experiment sums are diagnostic because shared nuisances and cross-covariances are not included.",
+  "conditional_channel_summary": {
+    "ACT_EE": {"fluid_favored": 11, "median": 0.7572390353834493, "range": [0.6991530059356066, 1.1199201209525214], "scalar_favored": 0},
+    "ACT_TE": {"fluid_favored": 10, "median": 1.2199010258172507, "range": [-0.1179618257235262, 2.4695863478907967], "scalar_favored": 1},
+    "ACT_TT": {"fluid_favored": 11, "median": 1.5331089859414035, "range": [0.8933429112952638, 1.922553688155375], "scalar_favored": 0},
+    "Planck_EE": {"fluid_favored": 0, "median": -3.970959908703918, "range": [-4.427008696936298, -3.578674492586231], "scalar_favored": 11},
+    "Planck_TE": {"fluid_favored": 0, "median": -0.6305505810481975, "range": [-1.0019647932104476, -0.4814008289309015], "scalar_favored": 11},
+    "Planck_TT": {"fluid_favored": 1, "median": -1.0713087090892088, "range": [-1.3070218607194022, 0.01704491467185676], "scalar_favored": 10},
+    "SPT_EE": {"fluid_favored": 11, "median": 0.24803644108519052, "range": [0.18324140148145318, 0.7513517110533598], "scalar_favored": 0},
+    "SPT_TE": {"fluid_favored": 8, "median": 0.3056399588634804, "range": [-0.38405609779599814, 2.0459525265779632], "scalar_favored": 3},
+    "SPT_TT": {"fluid_favored": 0, "median": -0.11742638530011362, "range": [-0.7442741041539094, -0.05473322153359561], "scalar_favored": 11}
+  },
+  "decision": "NO_COHERENT_MODEL_SPECIFIC_PREFERENCE",
+  "model_specific_sign_counts": {
+    "ACT": {"fluid_favored": 11, "scalar_favored": 0, "ties": 0},
+    "Planck": {"fluid_favored": 0, "scalar_favored": 11, "ties": 0},
+    "SPT": {"fluid_favored": 8, "scalar_favored": 3, "ties": 0},
+    "combined": {"fluid_favored": 5, "scalar_favored": 6, "ties": 0}
+  },
+  "model_specific_tangent_ranges": {
+    "ACT": [1.7497695335788563, 5.032081778210312],
+    "Planck": [-4.2943718180099495, -3.0657044625969547],
+    "SPT": [-0.5346601185361806, 2.7789860563131015],
+    "combined": [-2.995576996988447, 4.745363371926459]
+  },
+  "next_gate": "A full native AdS-EDE or NEDE implementation with its own background, perturbations, and nuisance tangent basis on the matched Planck+ACT+SPT stack.",
+  "observable_state": {
+    "all_rows_valid": true,
+    "conditional_channel_blocks": 99,
+    "fluid_derivative_spectra": 14,
+    "fluid_native_tangent_bases": 1,
+    "joint_fits_valid": 66,
+    "scalar_tangent_bases": 11
+  },
+  "principal_conclusion": "PROFILE_ASYMMETRY_REMOVED_CROSS_EXPERIMENT_CONFLICT_PERSISTS",
+  "scientific_decision": {
+    "act_dr6": "effective fluid favored in 11/11 bases",
+    "diagnostic_sum": "crosses zero; no coherent model-specific preference",
+    "planck": "scalar favored in 11/11 bases",
+    "spt_3g": "basis-sensitive, fluid favored in 8/11 and scalar in 3/11"
+  },
+  "shared_tangent_ranges_T_RIVAL_001": {
+    "ACT": [2.5000080592548386, 3.778684831153072],
+    "Planck": [-5.25722881498325, -3.492121515100166],
+    "SPT": [-0.43760131599988483, 0.22290084027959267],
+    "combined": [-2.9880888342245697, 0.5094641563324984]
+  },
+  "state": "COMPLETED_AND_CONTRACT_VALIDATED_LOCAL_CHAT_RUNTIME",
+  "test_id": "T-RIVAL-002",
+  "reproducibility_package_sha256": "6476f9ea74865543a1daf043c823faca46f5e0825b79001fbd18137f3343fe57"
+}
