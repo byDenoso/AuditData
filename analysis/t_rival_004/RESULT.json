@@ -1,0 +1,27 @@
+{
+  "test_id": "T-RIVAL-004",
+  "state": "COMPLETED_AND_CONTRACT_VALIDATED",
+  "decision": "PEER_1P_AIC_PREFERRED_AFTER_EXACT_SHAPE_UNION",
+  "act_role": "excluded_from_decision_stack_preserved_as_historical_stress_test",
+  "stack": "Planck 2018 TTTEEE plik-lite + SPT-3G D1 TT/TE/EE",
+  "models": {
+    "peer": "PEER-1p, native EarlyQuintessence n=3 with f_early free on exact grid",
+    "axion": "native axion-EDE n=3 with f_early, log10(zc), and theta_i free"
+  },
+  "exact_f_grid_cells": 9,
+  "exact_f_minimum": 0.06,
+  "exact_shape_union_points": 16,
+  "tau_prior_count": 3,
+  "best_axion": {
+    "f_early": 0.06,
+    "log10_zc": 3.822245,
+    "theta_i": 2.8915
+  },
+  "delta_chi2_axion_minus_peer_range": [-0.08341850974306908, -0.08310282654065304],
+  "delta_aic_axion_minus_peer_range": [3.916581490256931, 3.916897173459347],
+  "peer_aic_favored_tau_priors": 3,
+  "axion_aic_favored_tau_priors": 0,
+  "retired_output": "The initial local tangent optimum near delta_log10_zc=0.0765 and delta_theta_i=0.0273 was falsified by exact CAMB spectra and is not used.",
+  "claim_boundary": "The f_early direction is exact-grid profiled and the winning axion shape point has exact cross-neighbours in log10(zc) and theta_i. This is a local native axion-EDE shape scan, not a full global scan or Bayesian evidence.",
+  "package_sha256": "4252515a944f3bc3a079da6fd1dc674cda151fb56fa1cf68421f434f5f3c775a"
+}
