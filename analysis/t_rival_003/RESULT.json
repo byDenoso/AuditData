@@ -1,0 +1,24 @@
+{
+  "test_id": "T-RIVAL-003",
+  "state": "COMPLETED_AND_CONTRACT_VALIDATED",
+  "decision": "PLANCK_SPT_SCALAR_PREFERENCE_ROBUST",
+  "act_role": "excluded_from_decision_stack_preserved_as_historical_stress_test",
+  "stack": "Planck 2018 TTTEEE plik-lite + SPT-3G D1 TT/TE/EE",
+  "basis_count": 11,
+  "tau_prior_count": 3,
+  "joint_model_fit_count": 66,
+  "delta_chi2_scalar_minus_fluid_range": [-7.812571708299515, -4.538991927131974],
+  "delta_chi2_median": -7.08755320456703,
+  "scalar_favored_replays": 33,
+  "fluid_favored_replays": 0,
+  "channel_medians_planck_lowE": {
+    "Planck_TT": -2.9262121945587296,
+    "Planck_TE": -0.5835277753278376,
+    "Planck_EE": -4.377121238393443,
+    "SPT_TT": -0.4072445359116159,
+    "SPT_TE": 0.5535116116083003,
+    "SPT_EE": -0.8327579574967174
+  },
+  "claim_boundary": "Planck and SPT share cosmological tangent coefficients and retain separate calibration parameters. This is a local fixed-template/tangent diagnostic against an acoustically near-matched effective fluid, not a global detection significance.",
+  "package_sha256": "8d0d49dec8b3be71e2966ca38c0dae918bfe223bd0778e7095c3c2fa9bcdf08f"
+}
