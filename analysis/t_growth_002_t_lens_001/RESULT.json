@@ -1,0 +1,46 @@
+{
+  "program": "PEER Planck+SPT growth and lensing closure",
+  "state": "COMPLETED_AND_CONTRACT_VALIDATED",
+  "decision": "PLANCK_SPT_PEER_GROWTH_AND_LENSING_CONSISTENT",
+  "preferred_cell": {
+    "f_PEER": 0.060,
+    "n": 3.0,
+    "log10_zc": 3.81,
+    "theta_i": 2.89155
+  },
+  "T-GROWTH-002": {
+    "decision": "PLANCK_SPT_PEER_GROWTH_CONSISTENT",
+    "max_abs_matched_D_ratio_minus_1": 1.2689120411080168e-06,
+    "max_abs_matched_growth_rate_ratio_minus_1": 1.6876210119365354e-06,
+    "PEER_S8_range": [0.8308810783375926, 0.8344394478169767],
+    "PEER_BOSS_DR12_diagonal_chi2_3pt_range": [1.5620092136914285, 1.716873146075266],
+    "claim_boundary": "Exact CAMB predictions at locally profiled Planck+SPT points. BOSS DR12 uses published marginal f-sigma8 values with stat and systematic errors combined in quadrature and a diagonal diagnostic, not the full correlated likelihood."
+  },
+  "T-LENS-001": {
+    "decision": "PLANCK_SPT_PEER_LENSING_CONSISTENT",
+    "PEER_Planck_lensing_amplitude_pull_sigma_range": [1.0859755985097364, 1.2178002530737586],
+    "native_axion_Planck_lensing_amplitude_pull_sigma_range": [1.109649316294875, 1.241375544874268],
+    "matched_axion_over_PEER_nonlinear_L8_400_amplitude_range": [1.000112755189582, 1.0001127706210144],
+    "matched_axion_over_PEER_nonlinear_L8_400_max_shape_residual": 0.00034196037461020623,
+    "matched_LCDM_over_PEER_nonlinear_L8_400_amplitude_range": [1.0067462572342314, 1.0067495851707597],
+    "matched_LCDM_over_PEER_nonlinear_L8_400_max_shape_residual": 0.04245708052852559,
+    "claim_boundary": "The Planck check uses the published one-dimensional lensing-only amplitude combination plus exact CAMB C_L^phiphi morphology. Physical lensing predictions use A_lens=1; fitted CMB smoothing A_lens is recorded separately."
+  },
+  "execution": {
+    "CAMB_version": "1.6.6",
+    "exact_CAMB_runs": 30,
+    "tau_priors": ["planck_lowE", "spt_default", "wide_conservative"],
+    "linear_and_HMCode_nonlinear": true,
+    "lmax": 2000,
+    "redshift_count": 10,
+    "initial_checkpointed_runs": 15,
+    "resumed_runs": 15,
+    "workspace_tests": "4/4 PASS",
+    "clean_extraction_tests": "4/4 PASS",
+    "package_files_hashed": 92,
+    "zip_integrity": "PASS"
+  },
+  "paper_impact": "The Planck+SPT preferred PEER cell passes late-time growth and physical-lensing closure. Native axion-EDE is nearly indistinguishable from PEER in growth and lensing, strengthening the interpretation of PEER as a compressed identifiable realization of the same acoustic minimum.",
+  "next_gate": "Editorial freeze and provenance pass for the microphysics paper. A full correlated BOSS/DESI full-shape and Planck lensing likelihood remains a production statistical refinement, not a blocker for the current microphysics claim.",
+  "reproducibility_package_sha256": "770c66ad46be7d23f08ed003412515acdefc8baf548f5b32f420f75925c72c48"
+}
