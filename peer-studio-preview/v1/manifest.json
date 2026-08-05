@@ -1,0 +1,22 @@
+{
+  "schema": "peer-studio/preview-payload-v1",
+  "created_at": "2026-08-05T22:44:00Z",
+  "source": "peer-studio-rework feat/mark-iii-rework@39dcdc7",
+  "chunks": 8,
+  "chunk_paths": [
+    "peer-studio-preview/v1/chunk-00.txt",
+    "peer-studio-preview/v1/chunk-01.txt",
+    "peer-studio-preview/v1/chunk-02.txt",
+    "peer-studio-preview/v1/chunk-03.txt",
+    "peer-studio-preview/v1/chunk-04.txt",
+    "peer-studio-preview/v1/chunk-05.txt",
+    "peer-studio-preview/v1/chunk-06.txt",
+    "peer-studio-preview/v1/chunk-07.txt"
+  ],
+  "source_bytes": 74563,
+  "compressed_bytes": 50698,
+  "base64_characters": 67600,
+  "source_sha256": "5b8affa8eef5aa1c4c86afd5b9cbb6fb8f4aeb71f0f7cea89b335bf454d9e2e5",
+  "compressed_sha256": "87fbad9ce91b00f2ac20e8a7a3e2bd7becd77eb35a59bab780dbe6bff0a9e4a0",
+  "policy": "fail-closed"
+}
