@@ -1,9 +1,9 @@
 {
   "rewrites": [
-    { "source": "/api/peer/latest-manifest.json", "destination": "/api/site?path=__manifest__" },
-    { "source": "/assets/:asset", "destination": "/api/site?path=assets/:asset" },
-    { "source": "/favicon.svg", "destination": "/api/site?path=favicon.svg" },
-    { "source": "/index.html", "destination": "/api/site?path=index.html" },
-    { "source": "/", "destination": "/api/site?path=index.html" }
+    { "source": "/api/peer/latest-manifest.json", "destination": "/api/site-v2?path=__manifest__" },
+    { "source": "/assets/:asset", "destination": "/api/site-v2?path=assets/:asset" },
+    { "source": "/favicon.svg", "destination": "/api/site-v2?path=favicon.svg" },
+    { "source": "/index.html", "destination": "/api/site-v2?path=index.html" },
+    { "source": "/", "destination": "/api/site-v2?path=index.html" }
   ]
 }
