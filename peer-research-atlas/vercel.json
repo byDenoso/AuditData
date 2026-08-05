@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/api/peer/latest-manifest.json", "destination": "/api/site?path=__manifest__" },
+    { "source": "/assets/:asset", "destination": "/api/site?path=assets/:asset" },
+    { "source": "/favicon.svg", "destination": "/api/site?path=favicon.svg" },
+    { "source": "/index.html", "destination": "/api/site?path=index.html" },
+    { "source": "/", "destination": "/api/site?path=index.html" }
+  ]
+}
