@@ -1,0 +1,34 @@
+name: Fetch PR4 full assets
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-pr4-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Download PR4 likelihood assets
+        run: |
+          set -euxo pipefail
+          mkdir -p payload
+          curl -L --fail --retry 8 -o payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz https://portal.nersc.gov/cfs/cmb/planck2020/likelihoods/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz
+          curl -L --fail --retry 8 -o payload/planck_2020_lollipop.tar.gz https://portal.nersc.gov/cfs/cmb/planck2020/likelihoods/planck_2020_lollipop.tar.gz
+          git clone --depth 1 https://github.com/carronj/planck_PR4_lensing.git payload/planck_PR4_lensing
+          rm -rf payload/planck_PR4_lensing/.git
+          tar -tzf payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz >/dev/null
+          tar -tzf payload/planck_2020_lollipop.tar.gz >/dev/null
+          sha256sum payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz payload/planck_2020_lollipop.tar.gz > payload/SHA256SUMS.txt
+          tar -czf pr4-full-assets.tar.gz payload
+      - name: Upload PR4 full assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr4-full-assets
+          path: pr4-full-assets.tar.gz
+          retention-days: 1
+          compression-level: 0
