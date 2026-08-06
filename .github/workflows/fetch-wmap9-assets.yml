@@ -16,37 +16,78 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Download official WMAP9 likelihood payload
+      - name: Download and validate official WMAP9 payload
         run: |
           set -euxo pipefail
-          mkdir -p payload
+          mkdir -p payload/meta payload/chunks
           curl --fail --location --retry 8 --retry-delay 5 --connect-timeout 30 \
             "$WMAP_URL" -o payload/wmap_likelihood_full_v5.tar.gz
-          test "$(stat -c%s payload/wmap_likelihood_full_v5.tar.gz)" -gt 800000000
+          test "$(stat -c%s payload/wmap_likelihood_full_v5.tar.gz)" -eq 950684664
           tar -tzf payload/wmap_likelihood_full_v5.tar.gz >/dev/null
-          sha256sum payload/wmap_likelihood_full_v5.tar.gz | tee payload/SHA256SUMS.txt
+          echo "EF8C9172CD1E2CFE85D221F07671846B5C5FF5BEC2E69E6BFE42B0E20EA98A94  payload/wmap_likelihood_full_v5.tar.gz" > payload/EXPECTED_SHA256SUMS.txt
+          sha256sum -c payload/EXPECTED_SHA256SUMS.txt
+          sha256sum payload/wmap_likelihood_full_v5.tar.gz > payload/meta/SHA256SUMS.txt
+          split -b 200000000 -d -a 2 payload/wmap_likelihood_full_v5.tar.gz payload/chunks/wmap_likelihood_full_v5.tar.gz.part
+          test "$(find payload/chunks -type f | wc -l)" -eq 5
+          sha256sum payload/chunks/* > payload/meta/PART_SHA256SUMS.txt
 
       - name: Fetch pyWMAP wrapper
         run: |
           set -euxo pipefail
-          git clone --depth 1 https://github.com/HTJense/pyWMAP.git payload/pyWMAP
-          rm -rf payload/pyWMAP/.git
-          python -m py_compile payload/pyWMAP/wmaplike/wmap.py
+          git clone --depth 1 https://github.com/HTJense/pyWMAP.git payload/meta/pyWMAP
+          rm -rf payload/meta/pyWMAP/.git
+          python -m py_compile payload/meta/pyWMAP/wmaplike/wmap.py
 
       - name: Write provenance
         run: |
-          cat > payload/PROVENANCE.txt <<'EOF'
+          cat > payload/meta/PROVENANCE.txt <<'EOF'
           Official WMAP9 likelihood payload from NASA LAMBDA DR5.
           URL: https://lambda.gsfc.nasa.gov/data/map/dr5/dcp/likelihood/wmap_likelihood_full_v5.tar.gz
+          Expected SHA256: EF8C9172CD1E2CFE85D221F07671846B5C5FF5BEC2E69E6BFE42B0E20EA98A94
           Python wrapper: https://github.com/HTJense/pyWMAP
           Purpose: temporary transport for PEER WMAP9 + Planck PR4/NPIPE non-overlap test.
           EOF
 
-      - name: Upload verified payload
+      - name: Upload WMAP part 00
         uses: actions/upload-artifact@v4
         with:
-          name: wmap9-likelihood-payload
-          path: payload
+          name: wmap9-part-00
+          path: payload/chunks/wmap_likelihood_full_v5.tar.gz.part00
+          retention-days: 1
+          compression-level: 0
+      - name: Upload WMAP part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-part-01
+          path: payload/chunks/wmap_likelihood_full_v5.tar.gz.part01
+          retention-days: 1
+          compression-level: 0
+      - name: Upload WMAP part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-part-02
+          path: payload/chunks/wmap_likelihood_full_v5.tar.gz.part02
+          retention-days: 1
+          compression-level: 0
+      - name: Upload WMAP part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-part-03
+          path: payload/chunks/wmap_likelihood_full_v5.tar.gz.part03
+          retention-days: 1
+          compression-level: 0
+      - name: Upload WMAP part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-part-04
+          path: payload/chunks/wmap_likelihood_full_v5.tar.gz.part04
+          retention-days: 1
+          compression-level: 0
+      - name: Upload WMAP metadata and wrapper
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-meta
+          path: payload/meta
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
