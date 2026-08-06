@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "schemaVersion": "peer-studio-mirror/v1",
+    "publicProjection": true,
+    "generatedAt": "2026-08-05T20:39:00-03:00",
+    "lastSuccessfulSync": "2026-08-05T20:39:00-03:00",
+    "sourceRevisions": {
+      "controlTower": "reconciled-2026-08-05T20:39:00-03:00"
+    },
+    "warnings": []
+  },
+  "researchState": {
+    "primaryClaim": "Planck 2018 + DESI DR2 contains the canonical anchor-free PEER acoustic basin. On the exact Planck+SPT+DESI+Pantheon noSH0ES profile, the active f_PEER=0.06 branch retains ΔQ=-3.619 after exact null reoptimization, preserving a D3 local basin while retiring the tangent-calibrated 3.8σ claim. The scalar branch remains locally identifiable near n≈3, compresses the native axion-EDE minimum on Planck+SPT, passes growth/lensing closure, and conditionally measures a blue primordial tilt. This is profile/posterior geometry and closure evidence, not a global detection or Bayes-factor claim.",
+    "primaryClaimSource": "PEER_CONTROL_TOWER_CANONICAL",
+    "evidenceLevel": "D3",
+    "claimBoundary": "Profile/posterior geometry and closure evidence; not a global detection or Bayes-factor claim.",
+    "mainRisk": "The exact nonlinear profile reduces the tangent-statistic magnitude, and ACT does not provide coherent independent model confirmation.",
+    "nextFalsifier": "Execute the PDE-V0.8 exact continuous posterior and test whether the local basin retains material posterior volume away from f_PEER=0.",
+    "observedDelta": "Control Tower reconciled through 2026-08-05 20:39 BRT; no unreconciled Git delta is promoted above the canonical sheet."
+  },
+  "testsUpsert": [],
+  "publicationsUpsert": [],
+  "graphPatch": {
+    "nodesUpsert": [],
+    "edgesUpsert": []
+  },
+  "syncHealth": {
+    "state": "CURRENT",
+    "snapshotVersion": "ct-20260805-2039",
+    "testCount": 124,
+    "canonicalTestCount": 124,
+    "artifactCount": 161,
+    "conflicts": 0,
+    "sourcesConsulted": [
+      "PEER_CONTROL_TOWER_CANONICAL via connected-account bridge"
+    ],
+    "sourcesUnavailable": [],
+    "warnings": 0
+  }
+}
