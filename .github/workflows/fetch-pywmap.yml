@@ -1,0 +1,32 @@
+name: Fetch pyWMAP wrapper
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-pywmap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone pyWMAP
+        run: |
+          git clone --depth 1 https://github.com/HTJense/pyWMAP.git pyWMAP
+          rm -rf pyWMAP/.git
+          python - <<'PY'
+          from pathlib import Path
+          assert (Path('pyWMAP')/'wmaplike'/'wmap.py').exists()
+          print('pyWMAP wrapper verified')
+          PY
+      - name: Archive wrapper
+        run: tar -czf pyWMAP-wrapper.tar.gz pyWMAP
+      - name: Hash
+        run: sha256sum pyWMAP-wrapper.tar.gz > pyWMAP-wrapper.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pywmap-wrapper
+          path: |
+            pyWMAP-wrapper.tar.gz
+            pyWMAP-wrapper.sha256
+          retention-days: 1
+          compression-level: 0

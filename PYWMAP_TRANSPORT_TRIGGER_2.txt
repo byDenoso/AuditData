@@ -1,0 +1,1 @@
+Second temporary trigger file for a clean pull request event.
