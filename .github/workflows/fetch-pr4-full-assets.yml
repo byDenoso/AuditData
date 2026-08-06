@@ -13,22 +13,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Download PR4 likelihood assets
+      - name: Download PR4 likelihood assets and sources
         run: |
           set -euxo pipefail
           mkdir -p payload
           curl -L --fail --retry 8 -o payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz https://portal.nersc.gov/cfs/cmb/planck2020/likelihoods/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz
           curl -L --fail --retry 8 -o payload/planck_2020_lollipop.tar.gz https://portal.nersc.gov/cfs/cmb/planck2020/likelihoods/planck_2020_lollipop.tar.gz
+          git clone --depth 1 https://github.com/planck-npipe/hillipop.git payload/hillipop-src
+          git clone --depth 1 https://github.com/planck-npipe/lollipop.git payload/lollipop-src
           git clone --depth 1 https://github.com/carronj/planck_PR4_lensing.git payload/planck_PR4_lensing
-          rm -rf payload/planck_PR4_lensing/.git
+          rm -rf payload/*/.git
           tar -tzf payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz >/dev/null
           tar -tzf payload/planck_2020_lollipop.tar.gz >/dev/null
+          python -m py_compile payload/hillipop-src/planck_2020_hillipop/*.py
+          python -m py_compile payload/lollipop-src/planck_2020_lollipop/*.py
           sha256sum payload/planck_2020_hillipop_TTTEEE_bin_v4.2.tar.gz payload/planck_2020_lollipop.tar.gz > payload/SHA256SUMS.txt
-          tar -czf pr4-full-assets.tar.gz payload
-      - name: Upload PR4 full assets
+          tar -czf pr4-full-assets-with-code.tar.gz payload
+      - name: Upload PR4 full assets with code
         uses: actions/upload-artifact@v4
         with:
-          name: pr4-full-assets
-          path: pr4-full-assets.tar.gz
+          name: pr4-full-assets-with-code
+          path: pr4-full-assets-with-code.tar.gz
           retention-days: 1
           compression-level: 0
