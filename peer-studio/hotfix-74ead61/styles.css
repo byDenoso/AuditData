@@ -1,0 +1,8 @@
+@import url("https://peer-studio-cosmology-6wyx1qll8-denosooo2-1701s-projects.vercel.app/styles.css");
+.graph-canvas-wrap{height:clamp(560px,calc(100vh - 250px),820px);min-height:560px}
+#evidence-canvas{position:absolute;inset:0;width:100%;height:100%}
+.artifact-row-wrap{position:relative;border-top:1px solid var(--line)}
+.artifact-row-wrap:first-child{border-top:0}
+.artifact-row-wrap .artifact-row{border-top:0;padding-right:88px}
+.artifact-drive-link{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:2;border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--cyan);font:700 8px var(--mono);text-decoration:none;background:rgba(8,16,29,.92)}
+.artifact-drive-link:hover,.artifact-drive-link:focus-visible{border-color:var(--cyan);color:var(--text)}
