@@ -1,0 +1,52 @@
+name: Fetch WMAP9 assets
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WMAP_URL: https://lambda.gsfc.nasa.gov/data/map/dr5/dcp/likelihood/wmap_likelihood_full_v5.tar.gz
+
+jobs:
+  fetch-wmap9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Download official WMAP9 likelihood payload
+        run: |
+          set -euxo pipefail
+          mkdir -p payload
+          curl --fail --location --retry 8 --retry-delay 5 --connect-timeout 30 \
+            "$WMAP_URL" -o payload/wmap_likelihood_full_v5.tar.gz
+          test "$(stat -c%s payload/wmap_likelihood_full_v5.tar.gz)" -gt 800000000
+          tar -tzf payload/wmap_likelihood_full_v5.tar.gz >/dev/null
+          sha256sum payload/wmap_likelihood_full_v5.tar.gz | tee payload/SHA256SUMS.txt
+
+      - name: Fetch pyWMAP wrapper
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/HTJense/pyWMAP.git payload/pyWMAP
+          rm -rf payload/pyWMAP/.git
+          python -m py_compile payload/pyWMAP/wmaplike/wmap.py
+
+      - name: Write provenance
+        run: |
+          cat > payload/PROVENANCE.txt <<'EOF'
+          Official WMAP9 likelihood payload from NASA LAMBDA DR5.
+          URL: https://lambda.gsfc.nasa.gov/data/map/dr5/dcp/likelihood/wmap_likelihood_full_v5.tar.gz
+          Python wrapper: https://github.com/HTJense/pyWMAP
+          Purpose: temporary transport for PEER WMAP9 + Planck PR4/NPIPE non-overlap test.
+          EOF
+
+      - name: Upload verified payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: wmap9-likelihood-payload
+          path: payload
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
