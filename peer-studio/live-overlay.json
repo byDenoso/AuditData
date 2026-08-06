@@ -2,10 +2,11 @@
   "meta": {
     "schemaVersion": "peer-studio-mirror/v1",
     "publicProjection": true,
-    "generatedAt": "2026-08-05T20:39:00-03:00",
-    "lastSuccessfulSync": "2026-08-05T20:39:00-03:00",
+    "generatedAt": "2026-08-05T23:12:44-03:00",
+    "lastSuccessfulSync": "2026-08-05T23:12:44-03:00",
     "sourceRevisions": {
-      "controlTower": "reconciled-2026-08-05T20:39:00-03:00"
+      "controlTower": "revision-153",
+      "canonicalReconciliation": "2026-08-05T20:39:00-03:00"
     },
     "warnings": []
   },
@@ -16,7 +17,7 @@
     "claimBoundary": "Profile/posterior geometry and closure evidence; not a global detection or Bayes-factor claim.",
     "mainRisk": "The exact nonlinear profile reduces the tangent-statistic magnitude, and ACT does not provide coherent independent model confirmation.",
     "nextFalsifier": "Execute the PDE-V0.8 exact continuous posterior and test whether the local basin retains material posterior volume away from f_PEER=0.",
-    "observedDelta": "Control Tower reconciled through 2026-08-05 20:39 BRT; no unreconciled Git delta is promoted above the canonical sheet."
+    "observedDelta": "Control Tower revision 153 reconciled through 2026-08-05 20:39 BRT; no unreconciled Git delta is promoted above the canonical sheet."
   },
   "testsUpsert": [],
   "publicationsUpsert": [],
