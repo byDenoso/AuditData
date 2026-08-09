@@ -1,0 +1,37 @@
+name: triggerclass-source-export
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout TriggerCLASS NEDEv7.0
+        uses: actions/checkout@v4
+        with:
+          repository: NEDE-Cosmo/TriggerCLASS
+          ref: NEDEv7.0
+          submodules: recursive
+          path: triggerclass-source
+      - name: Verify source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'TriggerCLASS' triggerclass-source/README.md
+          git -C triggerclass-source rev-parse HEAD > TRIGGERCLASS_COMMIT.txt
+          git -C triggerclass-source submodule status > TRIGGERCLASS_SUBMODULES.txt || true
+          tar -czf triggerclass-nedev7-source.tar.gz triggerclass-source TRIGGERCLASS_COMMIT.txt TRIGGERCLASS_SUBMODULES.txt
+          sha256sum triggerclass-nedev7-source.tar.gz > triggerclass-nedev7-source.tar.gz.sha256
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: triggerclass-nedev7-source
+          path: |
+            triggerclass-nedev7-source.tar.gz
+            triggerclass-nedev7-source.tar.gz.sha256
+            TRIGGERCLASS_COMMIT.txt
+            TRIGGERCLASS_SUBMODULES.txt
+          if-no-files-found: error
+          retention-days: 1
