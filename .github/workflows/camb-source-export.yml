@@ -1,0 +1,37 @@
+name: camb-source-export
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CAMB 1.6.6 with submodules
+        uses: actions/checkout@v4
+        with:
+          repository: cmbant/CAMB
+          ref: 1.6.6
+          submodules: recursive
+          path: camb-source
+      - name: Verify source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '__version__ = "1.6.6"' camb-source/camb/__init__.py
+          git -C camb-source rev-parse HEAD > CAMB_COMMIT.txt
+          git -C camb-source submodule status > CAMB_SUBMODULES.txt
+          tar -czf camb-1.6.6-source.tar.gz camb-source CAMB_COMMIT.txt CAMB_SUBMODULES.txt
+          sha256sum camb-1.6.6-source.tar.gz > camb-1.6.6-source.tar.gz.sha256
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: camb-1.6.6-source
+          path: |
+            camb-1.6.6-source.tar.gz
+            camb-1.6.6-source.tar.gz.sha256
+            CAMB_COMMIT.txt
+            CAMB_SUBMODULES.txt
+          if-no-files-found: error
+          retention-days: 1
