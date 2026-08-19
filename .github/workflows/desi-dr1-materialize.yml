@@ -11,21 +11,15 @@ permissions:
 jobs:
   materialize:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
       - name: Probe official DESI hierarchy
         shell: bash
         run: |
           set -euo pipefail
           ROOT='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering'
-          for suffix in \
-            '' '/' \
-            '/data' '/data/' '/data/likelihood' '/data/likelihood/' \
-            '/v1.5' '/v1.5/' '/v1.5/data' '/v1.5/data/' '/v1.5/data/likelihood' '/v1.5/data/likelihood/' \
-            '/data_v1.5' '/data_v1.5/' '/data_v1.5/likelihood' '/data_v1.5/likelihood/'; do
+          for suffix in '' '/data' '/data/likelihood' '/v1.5' '/v1.5/data/likelihood' '/data_v1.5' '/data_v1.5/likelihood'; do
             url="${ROOT}${suffix}"
-            code="$(curl --location --silent --show-error --connect-timeout 15 --max-time 60 -o /tmp/desi-body -w '%{http_code}' "$url" || true)"
-            bytes="$(stat -c '%s' /tmp/desi-body 2>/dev/null || echo 0)"
-            prefix="$(head -c 80 /tmp/desi-body 2>/dev/null | tr '\n' ' ' || true)"
-            printf 'PROBE code=%s bytes=%s url=%s prefix=%q\n' "$code" "$bytes" "$url" "$prefix"
+            line="$(curl --head --location --silent --show-error --connect-timeout 5 --max-time 8 -o /dev/null -w 'code=%{http_code} effective=%{url_effective}' "$url" || true)"
+            printf 'PROBE %s url=%s\n' "$line" "$url"
           done
