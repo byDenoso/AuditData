@@ -13,13 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Probe official DESI hierarchy
+      - name: Enumerate official DESI release root
         shell: bash
         run: |
           set -euo pipefail
-          ROOT='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering'
-          for suffix in '' '/data' '/data/likelihood' '/v1.5' '/v1.5/data/likelihood' '/data_v1.5' '/data_v1.5/likelihood'; do
-            url="${ROOT}${suffix}"
-            line="$(curl --head --location --silent --show-error --connect-timeout 5 --max-time 8 -o /dev/null -w 'code=%{http_code} effective=%{url_effective}' "$url" || true)"
-            printf 'PROBE %s url=%s\n' "$line" "$url"
-          done
+          ROOT='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/'
+          curl --fail --location --silent --show-error --connect-timeout 5 --max-time 20 "$ROOT" -o root.html
+          echo "ROOT_BYTES=$(stat -c '%s' root.html)"
+          python - <<'PY'
+          import html, re
+          text = open('root.html', encoding='utf-8', errors='replace').read()
+          for href in re.findall(r'href=["\x27]([^"\x27]+)["\x27]', text, flags=re.I):
+              print('HREF', html.unescape(href))
+          PY
