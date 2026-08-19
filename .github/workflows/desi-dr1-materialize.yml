@@ -1,0 +1,74 @@
+name: DESI DR1 materialization gate
+
+on:
+  pull_request:
+    branches: [desi-dr1-materialize-base]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BASE: https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/data/likelihood
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch candidates and require exact registered SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out tmp
+          cat > targets.tsv <<'EOF'
+          bgs	db72d5fb076ad732c48a29032ee86c85f68faef14c4b0ee055f1ffad44ecf50d	BGS_BRIGHT-21.5	0.1-0.4
+          elg	a4e942eac71e89192ee1028c78d9e5c6c69c54bf082068ef73fd06b1a047fe59	ELG_LOPnotqso	1.1-1.6
+          lrg04_06	9ee36802183942595ea54b09b61686dedb337a5655ec1003889843082aaa949b	LRG	0.4-0.6
+          lrg06_08	a72c9f8019ce43e47c812cf645df723c84f960c4c17e40bef2869e4b5d0ab81b	LRG	0.6-0.8
+          lrg08_11	b7b8b17e78a3a666bd34a5406cb311c4279a948826a39cbbe0393c7022e71caf	LRG	0.8-1.1
+          qso	b4bca859502271d09ea900b4bed4228f43303097658a38b57ac345ed395b782f	QSO	0.8-2.1
+          EOF
+          : > out/manifest.tsv
+          while IFS=$'\t' read -r label expected tracer zrange; do
+            matched=0
+            for stem in \
+              'likelihood_spectrum-poles_syst-rotation-hod-photo' \
+              'likelihood_spectrum-poles+bao-recon_syst-rotation-hod-photo' \
+              'likelihood_spectrum-poles_syst-hod' \
+              'likelihood_spectrum-poles+bao-recon_syst-hod'; do
+              file="${stem}_${tracer}_GCcomb_z${zrange}_thetacut0.05.h5"
+              path="tmp/${label}.candidate.h5"
+              echo "TRY label=${label} file=${file}"
+              if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 15 --max-time 120 "$BASE/$file" -o "$path"; then
+                echo "MISS label=${label} file=${file}"
+                rm -f "$path"
+                continue
+              fi
+              got="$(sha256sum "$path" | awk '{print $1}')"
+              bytes="$(stat -c '%s' "$path")"
+              echo "GOT label=${label} bytes=${bytes} sha256=${got} file=${file}"
+              if [[ "$got" == "$expected" ]]; then
+                mv "$path" "out/${label}.h5"
+                printf '%s\t%s\t%s\t%s\n' "$label" "$expected" "$bytes" "$file" >> out/manifest.tsv
+                matched=1
+                break
+              fi
+              rm -f "$path"
+            done
+            if [[ "$matched" -ne 1 ]]; then
+              echo "FATAL no candidate matched registered SHA-256 for ${label}" >&2
+              exit 1
+            fi
+          done < targets.tsv
+          test "$(find out -maxdepth 1 -name '*.h5' | wc -l)" -eq 6
+          sha256sum out/*.h5
+          cat out/manifest.tsv
+
+      - name: Upload verified HDF5 payloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: desi-dr1-likelihoods
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
