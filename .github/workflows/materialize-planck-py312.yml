@@ -1,53 +1,223 @@
-name: Materialize Planck Python 3.12
+name: DS-1 DESI Holdout Temporary Runner
 
 on:
-  workflow_dispatch:
   pull_request:
     paths:
       - '.github/materialize-planck-trigger.txt'
+      - '.github/workflows/materialize-planck-py312.yml'
 
 permissions:
   contents: read
 
 env:
-  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONUNBUFFERED: '1'
 
 jobs:
-  materialize:
+  ds1-holdout:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.13'
-      - name: Install scientific runtime
+          python-version: '3.12'
+      - name: Query NOIRLab Data Lab DESI DR1 with frozen DS-1 geometry
         run: |
-          set -euxo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install camb==1.6.6 cobaya==3.6.2 fgspectra==1.4.1 syslibrary==0.2 astropy==7.2.0 py-bobyqa==1.5.0
-      - name: Materialize public Planck likelihoods
-        run: |
-          set -euxo pipefail
-          mkdir -p packages
-          cobaya-install \
-            planck_2018_highl_plik.TTTEEE_lite \
-            planck_2018_lowl.TT \
-            planck_2018_lowl.EE \
-            planck_2018_lensing.clik \
-            -p "$PWD/packages" --no-set-global
-          find packages -maxdepth 5 -type f | sort > planck-package-filelist.txt
-          sed -n '1,200p' planck-package-filelist.txt
-          du -sh packages
-          tar -C packages -czf planck-packages-py312.tar.gz .
-          sha256sum planck-packages-py312.tar.gz > planck-packages-py312.tar.gz.sha256
-      - name: Upload materialized packages
+          python - <<'PY'
+          import csv, io, json, math, random, statistics, time
+          from pathlib import Path
+          import urllib.parse, urllib.request
+
+          ENDPOINT = 'https://datalab.noirlab.edu/query/query'
+          TOKEN = 'anonymous.0.0.anon_access'
+          RA0, DEC0, RAD = 119.666, 32.857, 20.0
+          SEED = 20260824
+          N_CONTROL_CANDIDATES = 60
+
+          def query(sql, timeout=600):
+              params = {
+                  'sql': sql,
+                  'ofmt': 'csv',
+                  'out': 'None',
+                  'async': 'False',
+                  'drop': 'False',
+                  'profile': 'default',
+              }
+              url = ENDPOINT + '?' + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url, headers={
+                  'X-DL-AuthToken': TOKEN,
+                  'X-DL-TimeoutRequest': str(timeout),
+                  'User-Agent': 'DS1-preregistered-holdout/1.0',
+              })
+              with urllib.request.urlopen(req, timeout=timeout) as r:
+                  text = r.read().decode('utf-8', errors='replace')
+              if text.lstrip().startswith('<') or 'ERROR' in text[:200].upper():
+                  raise RuntimeError(text[:1200])
+              return text
+
+          def rows(sql):
+              return list(csv.DictReader(io.StringIO(query(sql))))
+
+          def scalar(sql, key=None):
+              rr = rows(sql)
+              if not rr:
+                  raise RuntimeError('empty SQL result')
+              if key is None:
+                  key = list(rr[0])[0]
+              return float(rr[0][key])
+
+          # Schema is evidence, not an assumption.
+          schema = []
+          try:
+              schema = rows("SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='desi_dr1' AND table_name='zpix' ORDER BY ordinal_position")
+          except Exception as e:
+              print('schema query warning:', repr(e))
+          cols = {r.get('column_name','').lower() for r in schema}
+          print('zpix columns:', sorted(cols))
+
+          # Build conservative quality filter from fields known to exist.
+          quality = []
+          if 'zcat_primary' in cols:
+              quality.append('zcat_primary = true')
+          if 'zwarn' in cols:
+              quality.append('zwarn = 0')
+          if 'survey' in cols:
+              quality.append("lower(survey) = 'main'")
+          if 'program' in cols:
+              quality.append("lower(program) = 'dark'")
+          quality_sql = (' AND ' + ' AND '.join(quality)) if quality else ''
+
+          # Validate actual categorical values on a tiny aggregate query.
+          diagnostics = {}
+          for c in ['spectype','survey','program','zcat_primary']:
+              if c in cols:
+                  try:
+                      diagnostics[c] = rows(f"SELECT {c}, COUNT(*) AS n FROM desi_dr1.zpix GROUP BY {c} ORDER BY n DESC LIMIT 12")
+                  except Exception as e:
+                      diagnostics[c] = {'error': repr(e)}
+
+          def angsep(ra1, dec1, ra2, dec2):
+              a1,a2 = math.radians(ra1), math.radians(ra2)
+              d1,d2 = math.radians(dec1), math.radians(dec2)
+              c = math.sin(d1)*math.sin(d2)+math.cos(d1)*math.cos(d2)*math.cos(a1-a2)
+              return math.degrees(math.acos(max(-1,min(1,c))))
+
+          rng = random.Random(SEED)
+          controls = []
+          sinlo, sinhi = math.sin(math.radians(-10)), math.sin(math.radians(70))
+          while len(controls) < N_CONTROL_CANDIDATES:
+              ra = 360*rng.random()
+              dec = math.degrees(math.asin(sinlo + (sinhi-sinlo)*rng.random()))
+              if angsep(ra,dec,RA0,DEC0) < 2*RAD:
+                  continue
+              controls.append((len(controls), ra, dec))
+
+          def count_pair(ra, dec, kind, shell, ref):
+              z1,z2 = shell; r1,r2 = ref
+              spec = "lower(spectype) = 'galaxy'" if kind == 'GALAXY' else "lower(spectype) = 'qso'"
+              sql = f"""
+              SELECT
+                SUM(CASE WHEN z >= {z1:.8f} AND z < {z2:.8f} THEN 1 ELSE 0 END) AS shell_n,
+                SUM(CASE WHEN z >= {r1:.8f} AND z < {r2:.8f} THEN 1 ELSE 0 END) AS ref_n
+              FROM desi_dr1.zpix
+              WHERE {spec}
+                {quality_sql}
+                AND z >= {r1:.8f} AND z < {r2:.8f}
+                AND q3c_radial_query(mean_fiber_ra, mean_fiber_dec, {ra:.8f}, {dec:.8f}, {RAD:.8f})
+              """
+              rr = rows(sql)[0]
+              return int(float(rr['shell_n'] or 0)), int(float(rr['ref_n'] or 0))
+
+          specs = {
+              'DS1a_lowz_GALAXY': {'kind':'GALAXY', 'shell':(0.573,0.785), 'ref':(0.4,1.0)},
+              'DS1b_highz_QSO': {'kind':'QSO', 'shell':(1.4436,1.688), 'ref':(0.8,2.1)},
+          }
+
+          output = {
+              'schema':'ds1-desi-holdout/v1',
+              'preregistered': {'ra_deg':RA0,'dec_deg':DEC0,'radius_deg':RAD,
+                                'low_z':[0.573,0.785],'high_z':[1.4436,1.688]},
+              'data_source':'NOIRLab Data Lab desi_dr1.zpix',
+              'quality_filter':quality,
+              'control_design': {
+                  'seed':SEED,
+                  'n_candidate_centers':N_CONTROL_CANDIDATES,
+                  'candidate_dec_range_deg':[-10,70],
+                  'exclude_within_deg':2*RAD,
+                  'coverage_gate':'ref_n >= 0.5 * DS1 ref_n; defined before outcome inspection',
+                  'primary_stat':'shell_n / ref_n',
+                  'p':'one-sided empirical add-one among coverage-qualified controls'
+              },
+              'diagnostics':diagnostics,
+              'tests':{}
+          }
+
+          flat_csv = []
+          for label, s in specs.items():
+              print('\nTEST', label)
+              ds_shell, ds_ref = count_pair(RA0, DEC0, s['kind'], s['shell'], s['ref'])
+              ds_ratio = ds_shell/ds_ref if ds_ref else float('nan')
+              print('DS1:', ds_shell, ds_ref, ds_ratio)
+              ctrl = []
+              for i,ra,dec in controls:
+                  try:
+                      sh, rf = count_pair(ra,dec,s['kind'],s['shell'],s['ref'])
+                      ratio = sh/rf if rf else None
+                      ctrl.append({'id':i,'ra':ra,'dec':dec,'shell_n':sh,'ref_n':rf,'ratio':ratio})
+                      print('control', i, round(ra,3), round(dec,3), sh, rf, ratio)
+                  except Exception as e:
+                      ctrl.append({'id':i,'ra':ra,'dec':dec,'error':repr(e)})
+                      print('control error', i, repr(e))
+                  time.sleep(0.05)
+
+              gate = 0.5*ds_ref
+              valid = [c for c in ctrl if c.get('ratio') is not None and c.get('ref_n',0) >= gate]
+              ratios = [c['ratio'] for c in valid]
+              if ratios:
+                  exceed = sum(r >= ds_ratio for r in ratios)
+                  p_emp = (exceed+1)/(len(ratios)+1)
+                  med = statistics.median(ratios)
+                  mad = statistics.median(abs(x-med) for x in ratios)
+                  rz = (ds_ratio-med)/(1.4826*mad) if mad > 0 else None
+                  mean = statistics.mean(ratios)
+                  sd = statistics.stdev(ratios) if len(ratios)>1 else 0
+                  z = (ds_ratio-mean)/sd if sd>0 else None
+              else:
+                  exceed=0; p_emp=None; med=mad=rz=mean=sd=z=None
+
+              result = {
+                  'kind':s['kind'],'shell_z':s['shell'],'reference_z':s['ref'],
+                  'ds1':{'shell_n':ds_shell,'ref_n':ds_ref,'ratio':ds_ratio},
+                  'coverage_gate_ref_n':gate,
+                  'n_valid_controls':len(valid),
+                  'n_exceed':exceed,
+                  'empirical_p_add1':p_emp,
+                  'control_ratio_median':med,'control_ratio_mad':mad,
+                  'robust_z':rz,'control_ratio_mean':mean,'control_ratio_sd':sd,'z_vs_controls':z,
+                  'controls':ctrl
+              }
+              output['tests'][label]=result
+              flat_csv.append({'test':label,'ds_shell_n':ds_shell,'ds_ref_n':ds_ref,'ds_ratio':ds_ratio,
+                               'n_valid_controls':len(valid),'n_exceed':exceed,'p_emp_add1':p_emp,
+                               'robust_z':rz,'z_vs_controls':z})
+
+          Path('ds1_desi_holdout.json').write_text(json.dumps(output,indent=2,sort_keys=True))
+          with open('ds1_desi_holdout_summary.csv','w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=list(flat_csv[0]))
+              w.writeheader(); w.writerows(flat_csv)
+          Path('ds1_desi_holdout_readme.txt').write_text(
+              'Frozen DS-1 holdout. No center/radius/redshift reoptimization. '\
+              'This stage uses DESI DR1 primary good spectra and self-normalized matched control caps; '\
+              'exact DESI LSS random-catalog calibration remains a stronger follow-up if needed.\n')
+          print('\nFINAL SUMMARY')
+          print(json.dumps({k:{kk:v for kk,v in val.items() if kk!='controls'} for k,val in output['tests'].items()},indent=2))
+          PY
+      - name: Upload DS-1 holdout result
         uses: actions/upload-artifact@v4
         with:
-          name: planck-packages-py312
+          name: ds1-desi-holdout-20260824
           path: |
-            planck-packages-py312.tar.gz
-            planck-packages-py312.tar.gz.sha256
-            planck-package-filelist.txt
-          compression-level: 0
+            ds1_desi_holdout.json
+            ds1_desi_holdout_summary.csv
+            ds1_desi_holdout_readme.txt
           retention-days: 3
