@@ -1,0 +1,4 @@
+DS-1 DESI preregistered holdout trigger 2026-08-24
+RA=119.666 Dec=32.857 R=20
+z_low=0.573-0.785
+z_high=1.4436-1.688
