@@ -1,0 +1,73 @@
+name: NEXO Science Center Preview
+
+on:
+  push:
+    branches: [nexo-science-center-preview-ci-action]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret is not configured in this repository"
+            exit 78
+          fi
+
+      - name: Reconstruct Science Center source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/nexo-science-center
+          cat nexo-science-center-staging/source.part000{0..7} | base64 -d > /tmp/nexo-source.bin
+          kind="$(file -b /tmp/nexo-source.bin)"
+          echo "archive=$kind"
+          if echo "$kind" | grep -qi 'XZ compressed'; then
+            tar -xJf /tmp/nexo-source.bin -C /tmp/nexo-science-center
+          elif echo "$kind" | grep -qi 'gzip compressed'; then
+            tar -xzf /tmp/nexo-source.bin -C /tmp/nexo-science-center
+          else
+            echo "::error::Unsupported source archive: $kind"
+            exit 2
+          fi
+          test -f /tmp/nexo-science-center/package.json
+          test -f /tmp/nexo-science-center/src/app/page.tsx
+
+      - name: Force Vercel Next.js build contract
+        run: |
+          set -euo pipefail
+          cd /tmp/nexo-science-center
+          cat > vercel.json <<'JSON'
+          {
+            "$schema": "https://openapi.vercel.sh/vercel.json",
+            "installCommand": "npm install",
+            "buildCommand": "npm run vercel-build"
+          }
+          JSON
+          mkdir -p .vercel
+          cat > .vercel/project.json <<'JSON'
+          {"projectId":"prj_G4ZluWexIVDm3tt0VMQUvtoN3KuG","orgId":"team_TLkDXqQIHke6IumXh3qzMDcs"}
+          JSON
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@59.3.0
+
+      - name: Deploy Preview only
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /tmp/nexo-science-center
+          vercel deploy --yes --scope denosooo2-1701s-projects --token "$VERCEL_TOKEN" | tee /tmp/preview-url.txt
+          echo "PREVIEW_URL=$(tail -n1 /tmp/preview-url.txt)" >> "$GITHUB_ENV"
+
+      - name: Report Preview
+        run: echo "$PREVIEW_URL"
