@@ -1,4 +1,4 @@
-name: nexo-local-joint-control-test
+name: nexo-local-joint-control
 on:
   push:
     branches: [nexo-desi-voidscan-temp-20260826]
@@ -13,3 +13,20 @@ jobs:
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
       - name: Joint-control contract
         run: PYTHONPATH=. pytest -q tests/test_local_joint_control.py
+      - name: Download 2MRS and Cosmicflows-4 groups
+        run: |
+          mkdir -p input joint_control
+          curl -fL --retry 5 'https://cdsarc.cds.unistra.fr/ftp/cats/J/ApJS/199/26/table3.dat.gz' -o input/table3.dat.gz
+          gunzip -c input/table3.dat.gz > input/table3.dat
+          curl -fL --retry 5 'https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=J/ApJ/944/94/groups&-out=RAJ2000,DEJ2000,GLON,GLAT,SGL,SGB,Dist,Vpec,e_DMzp,Ngal&-out.max=50000' -o input/cf4_groups.tsv
+      - name: Joint real-sky and rotation null gate
+        run: PYTHONPATH=. python tools/local_joint_control.py --2mrs input/table3.dat --cf4 input/cf4_groups.tsv --out joint_control --ndir 384 --nrot 300 | tee joint_control/run.log
+      - name: Readback
+        run: |
+          cat joint_control/summary.json
+          head -21 joint_control/top_joint_cells.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-local-joint-control
+          path: joint_control/
+          retention-days: 2
