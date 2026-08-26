@@ -1,0 +1,19 @@
+name: nexo-eboss-probe
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-eboss-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List eBOSS DR16 LRG files
+        shell: bash
+        run: |
+          set -euo pipefail
+          U='https://data.sdss.org/sas/dr16/eboss/lss/catalogs/DR16/'
+          curl -fsSL "$U" -o listing.html
+          grep -oE 'href="[^"]+"' listing.html | sed 's/href="//;s/"//' | grep -Ei 'LRG.*fits' | head -100
