@@ -1,4 +1,4 @@
-name: nexo-local-nearby-scan
+name: nexo-local-joint-control-test
 on:
   push:
     branches: [nexo-desi-voidscan-temp-20260826]
@@ -11,29 +11,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
-      - name: Contract tests
-        run: PYTHONPATH=. pytest -q tests/test_local_universe_nearby_scan.py
-      - name: Download public catalogs
-        run: |
-          mkdir -p input nearby_scan
-          curl -fL --retry 5 'https://cdsarc.cds.unistra.fr/ftp/cats/J/ApJS/199/26/table3.dat.gz' -o input/table3.dat.gz
-          gunzip -c input/table3.dat.gz > input/table3.dat
-          curl -fL --retry 5 'https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=J/ApJ/944/94/groups&-out=RAJ2000,DEJ2000,GLON,GLAT,SGL,SGB,Dist,Vpec,e_DMzp,Ngal&-out.max=50000' -o input/cf4_groups.tsv
-          curl -fL --retry 5 'https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR/Pantheon%2BSH0ES.dat' -o input/pantheon.dat
-          wc -l input/table3.dat input/cf4_groups.tsv input/pantheon.dat
-      - name: Blind nearby scan plus gates
-        run: PYTHONPATH=. python tools/local_universe_nearby_scan.py --2mrs input/table3.dat --cf4 input/cf4_groups.tsv --pantheon input/pantheon.dat --out nearby_scan --ndir 384 --nnull 80 | tee nearby_scan/run.log
-      - name: Readback
-        run: |
-          cat nearby_scan/summary.json
-          echo '--- candidates ---'
-          cat nearby_scan/candidate_verdicts.csv
-          echo '--- CF4 ---'
-          cat nearby_scan/cf4_flow_tests.csv
-          echo '--- H0 ---'
-          cat nearby_scan/incremental_h0_tests.csv
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nexo-local-nearby-scan
-          path: nearby_scan/
-          retention-days: 2
+      - name: Joint-control contract
+        run: PYTHONPATH=. pytest -q tests/test_local_joint_control.py
