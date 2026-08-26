@@ -93,39 +93,34 @@ def fit_shell_H0(z,mu,Csub,om,lo,hi):
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--data',required=True);ap.add_argument('--cov',required=True);ap.add_argument('--out',default='voidde');a=ap.parse_args()
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True)
-    d=pd.read_csv(a.data,delim_whitespace=True)
+    d=pd.read_csv(a.data,sep=r'\s+')
     Cfull=load_cov(a.cov,len(d))
     rows=[]; summaries={}
     for zcol in ['zHD','zCMB']:
         zall=d[zcol].to_numpy(float); muall=d.MU_SH0ES.to_numpy(float)
         mask=(d.IS_CALIBRATOR.to_numpy(int)==0)&np.isfinite(zall)&np.isfinite(muall)&(zall>0.005)&(zall<2.3)
         idx=np.where(mask)[0]; z=zall[idx]; mu=muall[idx]; cov=Cfull[np.ix_(idx,idx)]
-        # tiny jitter only if needed
         for eps in [0,1e-10,1e-8,1e-6]:
             try: cf=cho_factor(cov+np.eye(len(cov))*eps,lower=True,check_finite=False);break
             except Exception: continue
         base,basefun=fit_base(z,mu,cf)
         H0b,omb=map(float,base.x)
-        step_rows=[]
         best=None
         for R in R_CUTS:
             zc=comoving_z(R,H0b,omb)
             rr,Aerr=fit_step(z,mu,cf,zc,base)
             H0,om,A=map(float,rr.x); hrat=10**(-A/5); f0=omb**.55; delta=-3*(hrat-1)/f0
             row=dict(z_definition=zcol,Rcut_Mpc=float(R),zcut=zc,N_inside=int((z<zc).sum()),H0_background=H0,Omega_m=om,A_mag=A,A_err=Aerr,A_sig=A/Aerr if np.isfinite(Aerr) and Aerr>0 else np.nan,delta_chi2=float(rr.fun-base.fun),Hlocal_over_Hbg=hrat,deltaH_percent=100*(hrat-1),linear_delta_density=delta)
-            rows.append(row);step_rows.append(row)
+            rows.append(row)
             if best is None or rr.fun<best[0]:best=(rr.fun,row)
-        # shell H0 with global Om
         shells=[]
         for lo,hi in [(0.005,.01),(.01,.023),(.023,.05),(.05,.1),(.1,.15),(.15,.3),(.3,.6)]:
             x=fit_shell_H0(z,mu,cov,omb,lo,hi)
             if x: x['z_definition']=zcol;shells.append(x)
         pd.DataFrame(shells).to_csv(out/f'shell_H0_{zcol}.csv',index=False)
-        # CPL fit, before/after best void correction. Use fixed Om=DESI+CMB+Pantheon+ mean.
         cpl0=fit_cpl(z,mu,cf,.3114)
         brow=best[1]; corr=brow['A_mag']*smooth_step(z,brow['zcut'])
         cpl1=fit_cpl(z,mu,cf,.3114,corr=corr)
-        # compare shapes of published DESI DR2 CPL vs LCDM, normalized at z=0.5 to remove H0/M offset
         zz=np.array([.01,.02,.03,.05,.07,.1,.2,.3,.5,.8,1.0])
         mu_l=mu_model(zz,68.17,.3027,-1,0); mu_c=mu_model(zz,67.51,.3114,-.838,-.62)
         shape=(mu_c-mu_l); shape-=np.interp(.5,zz,shape)
