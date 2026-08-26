@@ -7,9 +7,13 @@ on:
 permissions:
   contents: read
 jobs:
-  falsify-fast:
+  structured:
+    strategy:
+      fail-fast: false
+      matrix:
+        tracer: [LRG, ELG]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,22 +23,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p data/v15 data/v12 fastbattery
-          for R in NGC SGC; do
-            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
-            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
-            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
-          done
-      - name: Run optimized battery
-        run: python tools/fast_systematics.py --lrg data/v15/LRG_NGC.fits data/v15/LRG_SGC.fits --elg data/v15/ELG_NGC.fits data/v15/ELG_SGC.fits --lrg12 data/v12/LRG_NGC.fits data/v12/LRG_SGC.fits --cand tools/falsification_candidates.csv --out fastbattery | tee fastbattery/run.log
+          mkdir -p data structured
+          B='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
+          if [ '${{ matrix.tracer }}' = 'LRG' ]; then
+            curl -fsSL --retry 5 "$B/LRG_NGC_clustering.dat.fits" -o data/NGC.fits
+            curl -fsSL --retry 5 "$B/LRG_SGC_clustering.dat.fits" -o data/SGC.fits
+          else
+            curl -fsSL --retry 5 "$B/ELG_LOPnotqso_NGC_clustering.dat.fits" -o data/NGC.fits
+            curl -fsSL --retry 5 "$B/ELG_LOPnotqso_SGC_clustering.dat.fits" -o data/SGC.fits
+          fi
+      - name: Run structured nulls
+        run: |
+          python tools/structured_nulls.py --tracer '${{ matrix.tracer }}' --ngc data/NGC.fits --sgc data/SGC.fits --candidates tools/falsification_candidates.csv --nrep 50 --outdir structured | tee structured/run_${{ matrix.tracer }}.log
       - name: Readback
         run: |
-          cat fastbattery/verdict.csv
-          cat fastbattery/tests.csv
-          cat fastbattery/scale_profiles.json
+          cat structured/verdict_${{ matrix.tracer }}.csv
+          cat structured/structured_${{ matrix.tracer }}.csv
       - uses: actions/upload-artifact@v4
         with:
-          name: nexo-fast-systematics
-          path: fastbattery/
+          name: nexo-structured-nulls-${{ matrix.tracer }}
+          path: structured/
           if-no-files-found: error
           retention-days: 1
