@@ -110,3 +110,29 @@ jobs:
           name: nexo-v14-act-lensing
           path: actout/
           retention-days: 1
+
+  planck-lensing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy astropy healpy
+      - name: Download Planck lensing map
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p planckdata planckout
+          curl -fL --retry 5 'https://irsa.ipac.caltech.edu/data/Planck/release_2/all-sky-maps/maps/component-maps/lensing/COM_CompMap_Lensing_2048_R2.00.tar' -o planck.tar
+          tar -xf planck.tar -C planckdata
+          find planckdata -type f | head -50
+      - name: Planck kappa test at V14
+        run: python tools/v14_planck_lensing.py --root planckdata --out planckout | tee planckout/run.log
+      - name: Planck readback
+        run: cat planckout/planck_v14.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-v14-planck-lensing
+          path: planckout/
+          retention-days: 1
