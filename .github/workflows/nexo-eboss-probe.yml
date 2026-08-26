@@ -7,13 +7,36 @@ on:
 permissions:
   contents: read
 jobs:
-  probe:
+  structured-eboss:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: List eBOSS DR16 LRG files
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download eBOSS DR16 LRG data and randoms
         shell: bash
         run: |
           set -euo pipefail
-          U='https://data.sdss.org/sas/dr16/eboss/lss/catalogs/DR16/'
-          curl -fsSL "$U" -o listing.html
-          grep -oE 'href="[^"]+"' listing.html | sed 's/href="//;s/"//' | grep -Ei 'LRG.*fits' | head -100
+          mkdir -p eboss ebossnull
+          U='https://data.sdss.org/sas/dr16/eboss/lss/catalogs/DR16'
+          for R in NGC SGC; do
+            curl -fsSL --retry 5 "$U/eBOSS_LRG_clustering_data-${R}-vDR16.fits" -o eboss/data_${R}.fits
+            curl -fsSL --retry 5 "$U/eBOSS_LRG_clustering_random-${R}-vDR16.fits" -o eboss/random_${R}.fits
+          done
+          ls -lh eboss
+      - name: Run eBOSS structured nulls
+        run: |
+          python tools/eboss_structured_nulls.py --data eboss/data_NGC.fits eboss/data_SGC.fits --random eboss/random_NGC.fits eboss/random_SGC.fits --cand tools/falsification_candidates.csv --nrep 100 --out ebossnull | tee ebossnull/run.log
+      - name: Readback
+        run: |
+          cat ebossnull/verdict.csv
+          cat ebossnull/eboss_structured.csv
+          cat ebossnull/meta.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-eboss-structured-nulls
+          path: ebossnull/
+          if-no-files-found: error
+          retention-days: 1
