@@ -13,20 +13,24 @@ jobs:
       - run: python -m pip install --upgrade pip numpy scipy pandas
       - name: Download 2MRS catalog
         run: |
-          mkdir -p input density2mrs
+          mkdir -p input density2mrs selfnorm
           curl -fL --retry 5 'https://cdsarc.cds.unistra.fr/ftp/cats/J/ApJS/199/26/table3.dat.gz' -o input/table3.dat.gz
           gunzip -c input/table3.dat.gz > input/table3.dat
           wc -l input/table3.dat
-      - name: Run 2MRS local-density gate
+      - name: Run 2MRS absolute-density diagnostic
         run: python tools/local_density_2mrs_peer_gate.py --data input/table3.dat --out density2mrs | tee density2mrs/run.log
+      - name: Run self-normalized n(z) gate
+        run: python tools/local_hole_nz_selfnorm.py --data input/table3.dat --out selfnorm | tee selfnorm/run.log
       - name: Readback
         run: |
           cat density2mrs/summary.json
-          cat density2mrs/primary_profile.csv
-          cat density2mrs/gate_40_300_systematics.csv
-          cat density2mrs/primary_sectors_300.csv
+          cat selfnorm/summary.json
+          cat selfnorm/primary_selfnorm.csv
+          cat selfnorm/primary_sector_selfnorm.csv
       - uses: actions/upload-artifact@v4
         with:
           name: nexo-2mrs-peer-density-gate
-          path: density2mrs/
+          path: |
+            density2mrs/
+            selfnorm/
           retention-days: 1
