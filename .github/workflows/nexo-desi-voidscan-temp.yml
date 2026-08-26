@@ -1,0 +1,61 @@
+name: nexo-desi-voidscan-temp
+
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-desi-voidscan-temp.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download DESI DR1 LSS catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data outputs
+          B='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
+          curl -fL --retry 5 "$B/LRG_NGC_clustering.dat.fits" -o data/LRG_NGC.fits
+          curl -fL --retry 5 "$B/LRG_SGC_clustering.dat.fits" -o data/LRG_SGC.fits
+          curl -fL --retry 5 "$B/ELG_LOPnotqso_NGC_clustering.dat.fits" -o data/ELG_NGC.fits
+          curl -fL --retry 5 "$B/ELG_LOPnotqso_SGC_clustering.dat.fits" -o data/ELG_SGC.fits
+          ls -lh data
+      - name: FITS readback
+        run: |
+          python - <<'PY'
+          from astropy.io import fits
+          from pathlib import Path
+          for p in sorted(Path('data').glob('*.fits')):
+              with fits.open(p,memmap=True) as h:
+                  d=h[1].data
+                  print(p,len(d),d.names)
+                  assert {'RA','DEC','Z'}.issubset(set(d.names))
+          PY
+      - name: Blind scan
+        run: |
+          python tools/desi_blind_scan.py \
+            --lrg-ngc data/LRG_NGC.fits --lrg-sgc data/LRG_SGC.fits \
+            --elg-ngc data/ELG_NGC.fits --elg-sgc data/ELG_SGC.fits \
+            --queries 50000 --mocks 5 --outdir outputs | tee outputs/run.log
+      - name: Readback
+        run: |
+          cat outputs/summary.json
+          echo '--- VOIDS ---'; head -25 outputs/void_candidates.csv || true
+          echo '--- WALLS ---'; head -25 outputs/wall_candidates.csv || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-desi-blind-scan
+          path: outputs/
+          if-no-files-found: error
+          retention-days: 1
