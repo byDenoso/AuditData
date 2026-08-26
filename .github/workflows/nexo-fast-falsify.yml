@@ -1,0 +1,39 @@
+name: nexo-fast-falsify
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-fast-falsify.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/v15 data/v12 fastbattery
+          for R in NGC SGC; do
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
+          done
+      - name: Run
+        run: python tools/fast_systematics.py --lrg data/v15/LRG_NGC.fits data/v15/LRG_SGC.fits --elg data/v15/ELG_NGC.fits data/v15/ELG_SGC.fits --lrg12 data/v12/LRG_NGC.fits data/v12/LRG_SGC.fits --cand tools/falsification_candidates.csv --out fastbattery | tee fastbattery/run.log
+      - name: Readback
+        run: |
+          cat fastbattery/verdict.csv
+          cat fastbattery/tests.csv
+          cat fastbattery/scale_profiles.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-fast-falsify
+          path: fastbattery/
+          retention-days: 1
