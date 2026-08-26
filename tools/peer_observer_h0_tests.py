@@ -23,7 +23,6 @@ def fit_H(z,mu,sig,Hlo=55,Hhi=85):
   r=mu-mu_model(z,H);return float(np.sum((r/np.maximum(sig,.04))**2))
  r=minimize_scalar(f,bounds=(Hlo,Hhi),method='bounded');return float(r.x),float(r.fun)
 def synth_bias(df,Hbg,R,delta,offset_frac,norient=160):
- # Same Pantheon+ sightlines/redshift distribution, but a noiseless global PEER background.
  m=(df.IS_CALIBRATOR==0)&(df.zHD>=.023)&(df.zHD<.15)&np.isfinite(df.RA)&np.isfinite(df.DEC)
  q=df.loc[m];zcos=q.zHD.to_numpy(float);U=unitvec(q.RA,q.DEC);r=chi_of_z(zcos,Hbg);X=U*r[:,None]
  f=OM**.55;alpha=-(f*Hbg*delta/3.0)
@@ -40,7 +39,6 @@ def synth_bias(df,Hbg,R,delta,offset_frac,norient=160):
  vals=np.asarray(vals)
  return dict(H0_background=Hbg,R_Mpc=R,delta_density=delta,offset_fraction=offset_frac,N=len(q),bias_mean_percent=float(vals.mean()),bias_sd_percent=float(vals.std(ddof=1)),bias_p05=float(np.quantile(vals,.05)),bias_p50=float(np.quantile(vals,.50)),bias_p95=float(np.quantile(vals,.95)),bias_min=float(vals.min()),bias_max=float(vals.max()),H0_app_mean=float(Hbg*(1+vals.mean()/100)),H0_app_p05=float(Hbg*(1+np.quantile(vals,.05)/100)),H0_app_p95=float(Hbg*(1+np.quantile(vals,.95)/100)))
 def direct_correction(df):
- # This is an empirical size of the Pantheon+ redshift/PV correction effect, not a residual to add to simulations.
  m=(df.IS_CALIBRATOR==0)&(df.zHD>=.023)&(df.zHD<.15)&np.isfinite(df.MU_SH0ES)
  q=df.loc[m]
  hhd,_=fit_H(q.zHD.to_numpy(float),q.MU_SH0ES.to_numpy(float),q.MU_SH0ES_ERR_DIAG.to_numpy(float))
@@ -59,7 +57,7 @@ def target_rows(S):
     out.append(dict(H0_background=Hbg,target_H0=target,required_boost_percent=need,linear_centered_required_delta=centered_delta,offset_fraction=off,best_R_Mpc=float(best.R_Mpc),best_delta_density=float(best.delta_density),best_H0_app_mean=float(best.H0_app_mean),best_H0_app_p05=float(best.H0_app_p05),best_H0_app_p95=float(best.H0_app_p95),target_error=float(best.abs_target_error)))
  return pd.DataFrame(out)
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--data',required=True);ap.add_argument('--out',default='peerh0');a=ap.parse_args();o=Path(a.out);o.mkdir(parents=True,exist_ok=True);d=pd.read_csv(a.data,sep=r'\\s+')
+ ap=argparse.ArgumentParser();ap.add_argument('--data',required=True);ap.add_argument('--out',default='peerh0');a=ap.parse_args();o=Path(a.out);o.mkdir(parents=True,exist_ok=True);d=pd.read_csv(a.data,sep=r'\s+')
  rows=[]
  for Hbg in PEER_BACKGROUNDS:
   for R in RGRID:
@@ -68,8 +66,7 @@ def main():
  S=pd.DataFrame(rows);S.to_csv(o/'peer_observer_void_grid.csv',index=False)
  T=target_rows(S);T.to_csv(o/'peer_target_matches.csv',index=False)
  direct=direct_correction(d)
- # Select exact PEER anchor-free target 73 summary and a conservative 20% underdensity family.
- H=PEER_BACKGROUNDS[0];need=100*(73/H-1);exact=T[(T.H0_background==H)&(T.target_H0==73)].sort_values(['offset_fraction'])
+ H=PEER_BACKGUNDS[0] if False else PEER_BACKGROUNDS[0];need=100*(73/H-1);exact=T[(T.H0_background==H)&(T.target_H0==73)].sort_values(['offset_fraction'])
  fam=S[(S.H0_background==H)&(S.delta_density==-0.20)&(S.R_Mpc.isin([150,200,250,300]))].copy()
  summary={'peer_anchor_free_H0':H,'peer_local_bracket_H0':PEER_BACKGROUNDS[1],'target_H0':73.0,'required_anchor_free_boost_percent':need,'direct_Pantheon_redshift_correction_effect':direct,'best_grid_matches_anchor_free_to_73':exact.to_dict(orient='records'),'delta_minus_0p20_family':fam.to_dict(orient='records')}
  (o/'summary.json').write_text(json.dumps(summary,indent=2,default=float))
