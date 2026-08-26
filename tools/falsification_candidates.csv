@@ -1,4 +1,4 @@
-candidate_id,kind,ra_deg,dec_deg,z,radius_mpc
+candidate_id,kind,ra_deg,dec_deg,z,R_mpc
 NEXO-V145,VOID,144.507035,-5.228770,0.942566,100
 NEXO-V14,VOID,193.309380,2.514639,0.822175,75
 NEXO-V11,VOID,173.785557,1.943433,0.828809,75
