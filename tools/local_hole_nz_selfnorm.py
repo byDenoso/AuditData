@@ -44,7 +44,6 @@ def prepare(d,frame,magmode,mlim=11.5):
  return x
 
 def model_nz(z,Mh,alpha,kcoef,mlim):
- # M* = Mh + 5 log10 h. Additive count-model k+e = kcoef*z.
  h=H0/100;Mstar=Mh+5*np.log10(h)
  dl=interp(DLG,z);dvdz=interp(DVDZG,z)
  DM=5*np.log10(np.maximum(dl,1e-9))+25
@@ -57,7 +56,7 @@ def model_nz(z,Mh,alpha,kcoef,mlim):
  return dvdz*sel
 
 def integrate_model(lo,hi,Mh,a,kc,mlim):
- z=np.linspace(lo,hi,3000);return np.trapz(model_nz(z,Mh,a,kc,mlim),z)
+ z=np.linspace(lo,hi,3000);return np.trapezoid(model_nz(z,Mh,a,kc,mlim),z)
 def observed_count(x,lo,hi):return int(((x.z>=lo)&(x.z<hi)).sum())
 def test_setup(x,frame,magmode,model,Mh,a,kc,mlim):
  rows=[]
@@ -67,7 +66,6 @@ def test_setup(x,frame,magmode,model,Mh,a,kc,mlim):
   for ilo,ihi in INNER_WINDOWS:
    ni=observed_count(x,ilo,ihi); mi=integrate_model(ilo,ihi,Mh,a,kc,mlim)*amp
    ratio=ni/mi if mi>0 else np.nan
-   # Poisson only for a transparent floor; outer normalization uncertainty included approximately.
    fracerr=math.sqrt(1/max(ni,1)+1/max(no,1));err=ratio*fracerr
    rows.append(dict(frame=frame,magmode=magmode,mlim=mlim,model=model,Mh=Mh,alpha=a,kcoef=kc,outer_lo=olo,outer_hi=ohi,N_outer=no,inner_lo=ilo,inner_hi=ihi,N_inner=ni,ratio_selfnorm=ratio,delta_selfnorm=ratio-1,ratio_err_poisson=err,significance=(ratio-1)/err if err>0 else np.nan))
  return rows
@@ -81,7 +79,6 @@ def bin_profile(x,model,Mh,a,kc,mlim,olo=.075,ohi=.100):
  return out
 
 def sector_relative(x,model,Mh,a,kc,mlim,ilo=.005,ihi=.075,olo=.075,ohi=.100):
- # Per longitude sector: compare inner/outer ratio to model inner/outer. Area cancels.
  mi=integrate_model(ilo,ihi,Mh,a,kc,mlim);mo=integrate_model(olo,ohi,Mh,a,kc,mlim);mr=mi/mo
  out=[]
  for sec in range(12):
@@ -100,11 +97,9 @@ def main():
    x=prepare(d,frame,mm,11.5)
    for model,Mh,a,kc in MODEL_GRID:rows+=test_setup(x,frame,mm,model,Mh,a,kc,11.5)
  R=pd.DataFrame(rows);R.to_csv(o/'selfnorm_grid.csv',index=False)
- # Frozen primary: CMB, total K<11.5, LH11 shape incl k+e, outer .075-.10.
  P=R[(R.frame=='cmb')&(R.magmode=='total')&(R.model=='LH11')&(R.outer_lo==.075)&(R.outer_hi==.100)].copy();P.to_csv(o/'primary_selfnorm.csv',index=False)
  x=prepare(d,'cmb','total',11.5);B=pd.DataFrame(bin_profile(x,'LH11',-23.24,-.86,-2.9,11.5));B.to_csv(o/'primary_nz_bins.csv',index=False)
  S=pd.DataFrame(sector_relative(x,'LH11',-23.24,-.86,-2.9,11.5));S.to_csv(o/'primary_sector_selfnorm.csv',index=False)
- # Summaries for inner .005-.075 and .005-.05 across all systematics.
  g75=R[(R.inner_lo==.005)&(R.inner_hi==.075)].copy();g50=R[(R.inner_lo==.005)&(R.inner_hi==.050)].copy()
  p75=P[(P.inner_lo==.005)&(P.inner_hi==.075)].iloc[0];p50=P[(P.inner_lo==.005)&(P.inner_hi==.050)].iloc[0]
  summary={
