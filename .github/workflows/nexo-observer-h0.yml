@@ -1,0 +1,34 @@
+name: nexo-observer-h0
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-observer-h0.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas
+      - name: Download Pantheon+
+        run: |
+          mkdir -p input observerh0
+          curl -fL --retry 5 'https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR/Pantheon%2BSH0ES.dat' -o input/pantheon.dat
+      - name: Run observer-location battery
+        run: python tools/observer_local_h0_tests.py --data input/pantheon.dat --out observerh0 | tee observerh0/run.log
+      - name: Readback
+        run: |
+          cat observerh0/summary.json
+          cat observerh0/zmin_H0.csv
+          cat observerh0/hemisphere_H0.csv
+          head -20 observerh0/observer_void_grid.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-observer-h0
+          path: observerh0/
+          retention-days: 1
