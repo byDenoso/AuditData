@@ -1,0 +1,28 @@
+name: nexo-peer-published-localhole-flow
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip numpy scipy pandas
+      - name: Download Pantheon+
+        run: |
+          mkdir -p input publishedhole
+          curl -fL --retry 5 'https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR/Pantheon%2BSH0ES.dat' -o input/pantheon.dat
+      - name: Run published Local Hole physical-flow gate
+        run: python tools/peer_published_localhole_flow.py --data input/pantheon.dat --out publishedhole | tee publishedhole/run.log
+      - name: Readback
+        run: |
+          cat publishedhole/summary.json
+          cat publishedhole/nominal_b1p1.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-peer-published-localhole-flow
+          path: publishedhole/
+          retention-days: 1
