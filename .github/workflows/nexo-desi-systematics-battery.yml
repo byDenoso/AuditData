@@ -2,13 +2,14 @@ name: nexo-desi-systematics-battery
 on:
   push:
     branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-desi-systematics-battery.yml]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  falsify:
+  falsify-fast:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,28 +19,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p data/v15 data/v12 battery
-          B15='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
-          B12='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2'
+          mkdir -p data/v15 data/v12 fastbattery
           for R in NGC SGC; do
-            curl -fL --retry 5 "$B15/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
-            curl -fL --retry 5 "$B15/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
-            curl -fL --retry 5 "$B12/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
+            curl -fsSL --retry 5 "https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
           done
-      - name: Run battery
-        run: |
-          python tools/falsify_desi_candidates.py \
-            --v15-lrg-ngc data/v15/LRG_NGC.fits --v15-lrg-sgc data/v15/LRG_SGC.fits \
-            --v15-elg-ngc data/v15/ELG_NGC.fits --v15-elg-sgc data/v15/ELG_SGC.fits \
-            --v12-lrg-ngc data/v12/LRG_NGC.fits --v12-lrg-sgc data/v12/LRG_SGC.fits \
-            --candidates tools/falsification_candidates.csv --outdir battery | tee battery/run.log
+      - name: Run optimized battery
+        run: python tools/fast_systematics.py --lrg data/v15/LRG_NGC.fits data/v15/LRG_SGC.fits --elg data/v15/ELG_NGC.fits data/v15/ELG_SGC.fits --lrg12 data/v12/LRG_NGC.fits data/v12/LRG_SGC.fits --cand tools/falsification_candidates.csv --out fastbattery | tee fastbattery/run.log
       - name: Readback
         run: |
-          cat battery/summary.json
-          cat battery/falsification_results.csv
+          cat fastbattery/verdict.csv
+          cat fastbattery/tests.csv
+          cat fastbattery/scale_profiles.json
       - uses: actions/upload-artifact@v4
         with:
-          name: nexo-desi-systematics-battery
-          path: battery/
+          name: nexo-fast-systematics
+          path: fastbattery/
           if-no-files-found: error
           retention-days: 1
