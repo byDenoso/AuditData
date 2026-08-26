@@ -1,0 +1,60 @@
+name: nexo-desi-falsification-serial
+
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-desi-falsification-serial.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  falsify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/v15 data/v12 data/eboss battery
+          B15='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
+          B12='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2'
+          curl -fL --retry 5 "$B15/LRG_NGC_clustering.dat.fits" -o data/v15/LRG_NGC.fits
+          curl -fL --retry 5 "$B15/LRG_SGC_clustering.dat.fits" -o data/v15/LRG_SGC.fits
+          curl -fL --retry 5 "$B12/LRG_NGC_clustering.dat.fits" -o data/v12/LRG_NGC.fits
+          curl -fL --retry 5 "$B12/LRG_SGC_clustering.dat.fits" -o data/v12/LRG_SGC.fits
+          E='https://data.sdss.org/sas/dr16/eboss/lss/catalogs/DR16'
+          curl -fL --retry 5 "$E/eBOSS_LRG_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_LRG_NGC.fits
+          curl -fL --retry 5 "$E/eBOSS_LRG_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_LRG_SGC.fits
+          curl -fL --retry 5 "$E/eBOSS_LRGpCMASS_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_LRGpCMASS_NGC.fits
+          curl -fL --retry 5 "$E/eBOSS_LRGpCMASS_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_LRGpCMASS_SGC.fits
+          curl -fL --retry 5 "$E/eBOSS_ELG_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_ELG_NGC.fits
+          curl -fL --retry 5 "$E/eBOSS_ELG_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_ELG_SGC.fits
+          curl -fL --retry 5 "$E/eBOSS_QSO_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_QSO_NGC.fits
+          curl -fL --retry 5 "$E/eBOSS_QSO_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_QSO_SGC.fits
+      - name: Falsification battery
+        run: |
+          python tools/falsification_battery.py \
+            --candidates tools/falsification_candidates.csv \
+            --v15 data/v15 --v12 data/v12 --eboss data/eboss \
+            --nulls 100 --outdir battery | tee battery/run.log
+      - name: Readback
+        run: |
+          cat battery/battery_summary.csv
+          echo '--- eBOSS ---'; cat battery/eboss_independent.csv
+          echo '--- version ---'; cat battery/catalog_version.csv
+          echo '--- stability ---'; cat battery/desi_v15_stability.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-desi-falsification-serial
+          path: battery/
+          if-no-files-found: error
+          retention-days: 1
