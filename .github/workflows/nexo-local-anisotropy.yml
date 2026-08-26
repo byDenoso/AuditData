@@ -1,0 +1,35 @@
+name: nexo-local-anisotropy
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-local-anisotropy.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas
+      - name: Download Pantheon+
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input anisotropy
+          curl -fL --retry 5 'https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR/Pantheon%2BSH0ES.dat' -o input/Pantheon+SH0ES.dat
+      - name: Run anisotropic expansion battery
+        run: python tools/local_anisotropic_expansion_tests.py --data input/Pantheon+SH0ES.dat --out anisotropy | tee anisotropy/run.log
+      - name: Readback
+        run: |
+          cat anisotropy/summary.json
+          cat anisotropy/anisotropy_shells.csv
+          cat anisotropy/vpec_dipole.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-local-anisotropy
+          path: anisotropy/
+          retention-days: 1
