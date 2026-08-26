@@ -14,7 +14,8 @@ jobs:
       - name: Download 2MRS catalog
         run: |
           mkdir -p input density2mrs
-          curl -fL --retry 5 'https://cdsarc.cds.unistra.fr/ftp/J/ApJS/199/26/table3.dat' -o input/table3.dat
+          curl -fL --retry 5 'https://cdsarc.cds.unistra.fr/ftp/cats/J/ApJS/199/26/table3.dat.gz' -o input/table3.dat.gz
+          gunzip -c input/table3.dat.gz > input/table3.dat
           wc -l input/table3.dat
       - name: Run 2MRS local-density gate
         run: python tools/local_density_2mrs_peer_gate.py --data input/table3.dat --out density2mrs | tee density2mrs/run.log
