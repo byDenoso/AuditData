@@ -20,41 +20,38 @@ jobs:
           python-version: '3.12'
       - name: Install
         run: python -m pip install --upgrade pip numpy scipy pandas astropy
-      - name: Download controls
+      - name: Download DESI versions
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p data/v15 data/v12 data/eboss battery
+          mkdir -p data/v15 data/v12 battery
           B15='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
           B12='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2'
-          curl -fL --retry 5 "$B15/LRG_NGC_clustering.dat.fits" -o data/v15/LRG_NGC.fits
-          curl -fL --retry 5 "$B15/LRG_SGC_clustering.dat.fits" -o data/v15/LRG_SGC.fits
-          curl -fL --retry 5 "$B12/LRG_NGC_clustering.dat.fits" -o data/v12/LRG_NGC.fits
-          curl -fL --retry 5 "$B12/LRG_SGC_clustering.dat.fits" -o data/v12/LRG_SGC.fits
-          E='https://data.sdss.org/sas/dr16/eboss/lss/catalogs/DR16'
-          curl -fL --retry 5 "$E/eBOSS_LRG_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_LRG_NGC.fits
-          curl -fL --retry 5 "$E/eBOSS_LRG_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_LRG_SGC.fits
-          curl -fL --retry 5 "$E/eBOSS_LRGpCMASS_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_LRGpCMASS_NGC.fits
-          curl -fL --retry 5 "$E/eBOSS_LRGpCMASS_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_LRGpCMASS_SGC.fits
-          curl -fL --retry 5 "$E/eBOSS_ELG_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_ELG_NGC.fits
-          curl -fL --retry 5 "$E/eBOSS_ELG_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_ELG_SGC.fits
-          curl -fL --retry 5 "$E/eBOSS_QSO_clustering_data-NGC-vDR16.fits" -o data/eboss/eBOSS_QSO_NGC.fits
-          curl -fL --retry 5 "$E/eBOSS_QSO_clustering_data-SGC-vDR16.fits" -o data/eboss/eBOSS_QSO_SGC.fits
-      - name: Falsification battery
+          for R in NGC SGC; do
+            curl -fL --retry 5 "$B15/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
+            curl -fL --retry 5 "$B15/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
+            curl -fL --retry 5 "$B12/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
+          done
+      - name: Systematics battery
         run: |
-          python tools/falsification_battery.py \
-            --candidates tools/falsification_candidates.csv \
-            --v15 data/v15 --v12 data/v12 --eboss data/eboss \
-            --nulls 100 --outdir battery | tee battery/run.log
+          python tools/falsify_desi_candidates.py \
+            --v15-lrg-ngc data/v15/LRG_NGC.fits --v15-lrg-sgc data/v15/LRG_SGC.fits \
+            --v15-elg-ngc data/v15/ELG_NGC.fits --v15-elg-sgc data/v15/ELG_SGC.fits \
+            --v12-lrg-ngc data/v12/LRG_NGC.fits --v12-lrg-sgc data/v12/LRG_SGC.fits \
+            --candidates tools/falsification_candidates.csv --outdir battery | tee battery/run.log
       - name: Readback
         run: |
-          cat battery/battery_summary.csv
-          echo '--- eBOSS ---'; cat battery/eboss_independent.csv
-          echo '--- version ---'; cat battery/catalog_version.csv
-          echo '--- stability ---'; cat battery/desi_v15_stability.csv
+          cat battery/summary.json
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv('battery/falsification_results.csv')
+          cols=['candidate_id','kind','verdict','LRG_ratio','LRG_wratio','LRG_localz_ratio','LRG_center_worst_ratio','LRG_thin_q90_ratio','LRG_v12_ratio']
+          cols += [c for c in ['ELG_ratio','ELG_wratio','ELG_localz_ratio','ELG_center_worst_ratio','ELG_thin_q90_ratio','planarity','planarity_perturb_min'] if c in d]
+          print(d[[c for c in cols if c in d]].to_string(index=False))
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: nexo-desi-falsification-serial
+          name: nexo-desi-systematics-battery
           path: battery/
           if-no-files-found: error
           retention-days: 1
