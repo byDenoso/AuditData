@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  scan:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -20,42 +20,33 @@ jobs:
           python-version: '3.12'
       - name: Install
         run: python -m pip install --upgrade pip numpy scipy pandas astropy
-      - name: Download DESI DR1 LSS catalogs
+      - name: Download DESI and ASTRA controls
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p data outputs
+          mkdir -p data astra validation
           B='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
           curl -fL --retry 5 "$B/LRG_NGC_clustering.dat.fits" -o data/LRG_NGC.fits
           curl -fL --retry 5 "$B/LRG_SGC_clustering.dat.fits" -o data/LRG_SGC.fits
           curl -fL --retry 5 "$B/ELG_LOPnotqso_NGC_clustering.dat.fits" -o data/ELG_NGC.fits
           curl -fL --retry 5 "$B/ELG_LOPnotqso_SGC_clustering.dat.fits" -o data/ELG_SGC.fits
-          ls -lh data
-      - name: FITS readback
+          curl -fL --retry 5 'https://zenodo.org/records/19687221/files/groups.tar.gz?download=1' -o astra/groups.tar.gz
+          tar -xzf astra/groups.tar.gz -C astra
+          echo 'ASTRA files:'; find astra -type f | head -30
+      - name: Validate frozen candidates
         run: |
-          python - <<'PY'
-          from astropy.io import fits
-          from pathlib import Path
-          for p in sorted(Path('data').glob('*.fits')):
-              with fits.open(p,memmap=True) as h:
-                  d=h[1].data
-                  print(p,len(d),d.names)
-                  assert {'RA','DEC','Z'}.issubset(set(d.names))
-          PY
-      - name: Blind scan
-        run: |
-          python tools/desi_blind_scan.py \
+          python tools/validate_frozen_candidates.py \
             --lrg-ngc data/LRG_NGC.fits --lrg-sgc data/LRG_SGC.fits \
             --elg-ngc data/ELG_NGC.fits --elg-sgc data/ELG_SGC.fits \
-            --queries 50000 --mocks 5 --outdir outputs | tee outputs/run.log
+            --candidates tools/frozen_candidates.csv --astra-root astra \
+            --mocks 100 --outdir validation | tee validation/run.log
       - name: Readback
         run: |
-          cat outputs/summary.json
-          echo '--- VOIDS ---'; head -25 outputs/void_candidates.csv || true
-          echo '--- WALLS ---'; head -25 outputs/wall_candidates.csv || true
+          cat validation/validation_summary.json
+          cat validation/frozen_validation.csv
       - uses: actions/upload-artifact@v4
         with:
-          name: nexo-desi-blind-scan
-          path: outputs/
+          name: nexo-desi-frozen-validation
+          path: validation/
           if-no-files-found: error
           retention-days: 1
