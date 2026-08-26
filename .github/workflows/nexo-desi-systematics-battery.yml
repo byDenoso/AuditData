@@ -1,0 +1,45 @@
+name: nexo-desi-systematics-battery
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  falsify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/v15 data/v12 battery
+          B15='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
+          B12='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.2'
+          for R in NGC SGC; do
+            curl -fL --retry 5 "$B15/LRG_${R}_clustering.dat.fits" -o data/v15/LRG_${R}.fits
+            curl -fL --retry 5 "$B15/ELG_LOPnotqso_${R}_clustering.dat.fits" -o data/v15/ELG_${R}.fits
+            curl -fL --retry 5 "$B12/LRG_${R}_clustering.dat.fits" -o data/v12/LRG_${R}.fits
+          done
+      - name: Run battery
+        run: |
+          python tools/falsify_desi_candidates.py \
+            --v15-lrg-ngc data/v15/LRG_NGC.fits --v15-lrg-sgc data/v15/LRG_SGC.fits \
+            --v15-elg-ngc data/v15/ELG_NGC.fits --v15-elg-sgc data/v15/ELG_SGC.fits \
+            --v12-lrg-ngc data/v12/LRG_NGC.fits --v12-lrg-sgc data/v12/LRG_SGC.fits \
+            --candidates tools/falsification_candidates.csv --outdir battery | tee battery/run.log
+      - name: Readback
+        run: |
+          cat battery/summary.json
+          cat battery/falsification_results.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-desi-systematics-battery
+          path: battery/
+          if-no-files-found: error
+          retention-days: 1
