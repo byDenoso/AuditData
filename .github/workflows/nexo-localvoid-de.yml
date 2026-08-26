@@ -1,0 +1,38 @@
+name: nexo-localvoid-darkenergy-tests
+on:
+  push:
+    branches: [nexo-desi-voidscan-temp-20260826]
+    paths: [.github/workflows/nexo-localvoid-de.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas
+      - name: Download official Pantheon+ data
+        run: |
+          set -euo pipefail
+          mkdir -p input voidde
+          B='https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR'
+          curl -fL --retry 5 "$B/Pantheon%2BSH0ES.dat" -o input/Pantheon+SH0ES.dat
+          curl -fL --retry 5 "$B/Pantheon%2BSH0ES_STAT%2BSYS.cov" -o input/Pantheon+SH0ES_STAT+SYS.cov
+          wc -l input/*
+      - name: Run local-void battery
+        run: python tools/local_void_dark_energy_tests.py --data input/Pantheon+SH0ES.dat --cov input/Pantheon+SH0ES_STAT+SYS.cov --out voidde | tee voidde/run.log
+      - name: Readback
+        run: |
+          cat voidde/summary.json
+          cat voidde/step_tests.csv
+          cat voidde/shell_H0_zHD.csv
+          cat voidde/shell_H0_zCMB.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-localvoid-darkenergy-tests
+          path: voidde/
+          retention-days: 1
