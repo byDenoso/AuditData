@@ -7,11 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
-  structured:
-    strategy:
-      fail-fast: false
-      matrix:
-        tracer: [LRG, ELG]
+  v14-deep:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -19,29 +15,98 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install --upgrade pip numpy scipy pandas astropy
-      - name: Download catalogs
+      - name: Download DESI V14 inputs
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p data structured
+          mkdir -p data v14out
           B='https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
-          if [ '${{ matrix.tracer }}' = 'LRG' ]; then
-            curl -fsSL --retry 5 "$B/LRG_NGC_clustering.dat.fits" -o data/NGC.fits
-            curl -fsSL --retry 5 "$B/LRG_SGC_clustering.dat.fits" -o data/SGC.fits
-          else
-            curl -fsSL --retry 5 "$B/ELG_LOPnotqso_NGC_clustering.dat.fits" -o data/NGC.fits
-            curl -fsSL --retry 5 "$B/ELG_LOPnotqso_SGC_clustering.dat.fits" -o data/SGC.fits
-          fi
-      - name: Run structured nulls
-        run: |
-          python tools/structured_nulls.py --tracer '${{ matrix.tracer }}' --ngc data/NGC.fits --sgc data/SGC.fits --candidates tools/falsification_candidates.csv --nrep 50 --outdir structured | tee structured/run_${{ matrix.tracer }}.log
+          curl -fsSL --retry 5 "$B/LRG_NGC_clustering.dat.fits" -o data/LRG.fits
+          curl -fsSL --retry 5 "$B/ELG_LOPnotqso_NGC_clustering.dat.fits" -o data/ELG.fits
+          curl -fsSL --retry 5 "$B/LRG_NGC_0_clustering.ran.fits" -o data/LRG_random.fits
+          ls -lh data
+      - name: Execute V14 deep battery
+        run: python tools/v14_deep_battery.py --lrg data/LRG.fits --elg data/ELG.fits --random data/LRG_random.fits --out v14out | tee v14out/run.log
       - name: Readback
         run: |
-          cat structured/verdict_${{ matrix.tracer }}.csv
-          cat structured/structured_${{ matrix.tracer }}.csv
+          cat v14out/summary.json
+          cat v14out/lrg_profiles.csv
+          cat v14out/redshift_sweep.csv
       - uses: actions/upload-artifact@v4
         with:
-          name: nexo-structured-nulls-${{ matrix.tracer }}
-          path: structured/
-          if-no-files-found: error
+          name: nexo-v14-deep
+          path: v14out/
+          retention-days: 1
+
+  ezmock-lookelsewhere:
+    strategy:
+      fail-fast: false
+      matrix:
+        mock: [1,2,3,4,5,6,7,8,9,10]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy pandas astropy
+      - name: Download EZmock LRG
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p mockdata mockout
+          M='${{ matrix.mock }}'
+          BASE="https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/mocks/EZmock/dark/v1/mock${M}"
+          ok=0
+          for ROOT in "$BASE/ffa" "$BASE"; do
+            if curl -fsSL --retry 2 "$ROOT/LRG_ffa_NGC_clustering.dat.fits" -o mockdata/LRG_NGC.fits; then
+              curl -fsSL --retry 2 "$ROOT/LRG_ffa_SGC_clustering.dat.fits" -o mockdata/LRG_SGC.fits
+              ok=1; break
+            fi
+          done
+          test "$ok" = 1
+          ls -lh mockdata
+      - name: Replay blind finder
+        run: python tools/desi_blind_scan.py --lrg-ngc mockdata/LRG_NGC.fits --lrg-sgc mockdata/LRG_SGC.fits --queries 30000 --mocks 3 --outdir mockout | tee mockout/run.log
+      - name: Compare to V14 threshold
+        run: |
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          p=Path('mockout/void_candidates.csv');v=pd.read_csv(p) if p.exists() else pd.DataFrame()
+          thr=21.494811
+          out={'mock':${{ matrix.mock }},'candidate_count':int(len(v)),'max_void_score':float(v.score.max()) if len(v) else None,'n_score_ge_V14':int((v.score>=thr).sum()) if len(v) else 0,'V14_score_threshold':thr}
+          Path('mockout/extremeness.json').write_text(json.dumps(out,indent=2));print(json.dumps(out,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-v14-ezmock-${{ matrix.mock }}
+          path: mockout/extremeness.json
+          retention-days: 1
+
+  act-lensing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --upgrade pip numpy scipy astropy pixell
+      - name: Download ACT DR6 lensing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p actdata actout
+          curl -fL --retry 5 'https://lambda.gsfc.nasa.gov/data/suborbital/ACT/ACT_dr6/dr6_lensing_release.tar.gz' -o act.tar.gz
+          tar -xzf act.tar.gz -C actdata
+          du -sh actdata
+          find actdata -type f | head -100
+      - name: ACT kappa test at V14
+        run: python tools/v14_act_lensing.py --root actdata --out actout | tee actout/run.log
+      - name: ACT readback
+        run: cat actout/act_v14.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-v14-act-lensing
+          path: actout/
           retention-days: 1
