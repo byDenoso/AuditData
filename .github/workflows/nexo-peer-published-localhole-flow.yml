@@ -12,7 +12,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
       - name: Contract tests
-        run: pytest -q tests/test_local_universe_nearby_scan.py
+        run: PYTHONPATH=. pytest -q tests/test_local_universe_nearby_scan.py
       - name: Download public catalogs
         run: |
           mkdir -p input nearby_scan
@@ -22,7 +22,7 @@ jobs:
           curl -fL --retry 5 'https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR/Pantheon%2BSH0ES.dat' -o input/pantheon.dat
           wc -l input/table3.dat input/cf4_groups.tsv input/pantheon.dat
       - name: Blind nearby scan plus gates
-        run: python tools/local_universe_nearby_scan.py --2mrs input/table3.dat --cf4 input/cf4_groups.tsv --pantheon input/pantheon.dat --out nearby_scan --ndir 384 --nnull 80 | tee nearby_scan/run.log
+        run: PYTHONPATH=. python tools/local_universe_nearby_scan.py --2mrs input/table3.dat --cf4 input/cf4_groups.tsv --pantheon input/pantheon.dat --out nearby_scan --ndir 384 --nnull 80 | tee nearby_scan/run.log
       - name: Readback
         run: |
           cat nearby_scan/summary.json
