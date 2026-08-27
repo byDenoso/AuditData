@@ -28,3 +28,10 @@ def test_drop_host_removes_exact_and_calibrator_rows_and_parameter():
 def test_h0_from_fivelogh0():
     from tools.shoes_host_jackknife import h0_from_fivelogh0
     assert abs(h0_from_fivelogh0(5*np.log10(73.04))-73.04)<1e-10
+
+
+def test_anchor_constraint_rows_remove_only_geometric_prior():
+    from tools.shoes_host_jackknife import anchor_constraint_rows
+    s=np.array(['LMC_HST','LMC_GRND','SMC','mu_LMC','N4258','mu_N4258'])
+    assert anchor_constraint_rows(s,'LMC').tolist()==[3]
+    assert anchor_constraint_rows(s,'N4258').tolist()==[5]
