@@ -36,3 +36,27 @@ def test_anchor_constraint_rows_remove_only_geometric_prior():
     assert anchor_constraint_rows(s,'LMC').tolist()==[5]
     assert anchor_constraint_rows(s,'N4258').tolist()==[7]
     assert anchor_constraint_rows(s,'MW').tolist()==[0,1]
+
+
+def test_superposition_canonical_cid_and_redshift_shift():
+    from tools.h0_superposition_kill_tests import canonical_cid, redshift_y_shift
+    assert canonical_cid('1992bl_50')=='1992bl'
+    assert canonical_cid('PSNJ0252467_150')=='psnj0252467'
+    assert canonical_cid('ASASSN-16hh_18')=='asassn16hh'
+    assert canonical_cid('2005df_ANU')=='2005dfanu'
+    assert abs(redshift_y_shift(.03,.03))<1e-14
+    assert redshift_y_shift(.03,.025)>0
+
+
+def test_deleted_estimator_weight_reproduces_cached_fit():
+    from tools.shoes_host_jackknife import build_precision_cache, fit_delete_cached
+    from tools.h0_superposition_kill_tests import deleted_estimator_weight
+    y=np.array([1.1,1.9,3.2,3.9,5.1])
+    L=np.column_stack([np.ones(5),np.arange(5.)])
+    C=np.array([[1,.1,0,0,0],[.1,1,.1,0,0],[0,.1,1,.1,0],[0,0,.1,1,.1],[0,0,0,.1,1.]])
+    params=['a','5logH0']
+    cache=build_precision_cache(y,L,C)
+    D=np.array([1,3])
+    q,cov,p=fit_delete_cached(y,L,params,cache,D,())
+    w=deleted_estimator_weight(L,params,cache,D,(),target='5logH0')
+    assert abs(w@y-q[p.index('5logH0')])<1e-10
