@@ -1,6 +1,8 @@
 import json, pathlib, yaml
 import camb
 from cobaya.run import run
+from fs_bao_likelihoods.desi_fs_bao_all import desi_fs_bao_all as DESILikelihood
+from fs_bao_likelihoods.reptvelocileptors import reptvelocileptors as REPTTheory
 
 ROOT=pathlib.Path('.').resolve()
 DATA=str(ROOT/'data/likelihood')
@@ -40,9 +42,12 @@ def make_info(name,m,As,tracers,suffix):
     extra={'num_massive_neutrinos':1,'nnu':3.044,'lens_potential_accuracy':0}
     if m['kind']=='uac': extra|={'dark_energy_model':'EarlyQuintessence','use_zc':True}
     return {
-      'theory':{'camb':{'extra_args':extra,'speed':2},'fs_bao_likelihoods.reptvelocileptors':None},
-      'likelihood':{'fs_bao_likelihoods.desi_fs_bao_all':{
-        'data_dir':DATA,'observable_name':'spectrum-poles-rotated+bao-recon','tracers':tracers,'solve':'marg'}},
+      'theory':{
+        'camb':{'extra_args':extra,'speed':2},
+        'reptvelocileptors':{'external':REPTTheory}},
+      'likelihood':{
+        'desi_fs_bao_all':{'external':DESILikelihood,'data_dir':DATA,
+          'observable_name':'spectrum-poles-rotated+bao-recon','tracers':tracers,'solve':'marg'}},
       'params':params,
       'sampler':{'minimize':{'method':'scipy','ignore_prior':False,'best_of':1,'seed':20260827,'max_evals':5000}},
       'output':str(OUT/f'{name}_{suffix}'),'force':True,'stop_at_error':True}
