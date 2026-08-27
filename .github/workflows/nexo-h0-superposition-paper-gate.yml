@@ -13,3 +13,38 @@ jobs:
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
       - name: Contract tests
         run: PYTHONPATH=. pytest -q tests/test_h0_superposition_paper_gate.py
+      - name: Download SH0ES matrix data
+        run: |
+          mkdir -p input paper_gate
+          base='https://raw.githubusercontent.com/marcushogas/Cepheid-Distance-Ladder-Data/main/SH0ES2022'
+          curl -fL --retry 5 "$base/y_R22.txt" -o input/y_R22.txt
+          curl -fL --retry 5 "$base/L_R22.txt" -o input/L_R22.txt
+          curl -fL --retry 5 "$base/C_R22.txt" -o input/C_R22.txt
+          curl -fL --retry 5 "$base/q_R22.txt" -o input/q_R22.txt
+      - name: Download Pantheon+ Hubble diagram
+        run: |
+          pbase='https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR'
+          curl -fL --retry 5 "$pbase/Pantheon%2BSH0ES.dat" -o input/Pantheon+SH0ES.dat
+          curl -fL --retry 5 "$pbase/Pantheon%2BSH0ES_STAT%2BSYS.cov" -o input/Pantheon+SH0ES_STAT+SYS.cov
+      - name: Run paper gate battery
+        run: |
+          PYTHONPATH=. python tools/h0_superposition_paper_gate.py \
+            --y input/y_R22.txt --L input/L_R22.txt --C input/C_R22.txt --q input/q_R22.txt \
+            --pantheon input/Pantheon+SH0ES.dat --pantheon-cov input/Pantheon+SH0ES_STAT+SYS.cov \
+            --out paper_gate | tee paper_gate/run.log
+      - name: Readback
+        run: |
+          cat paper_gate/summary.json
+          echo '--- cumulative ---'
+          cat paper_gate/cumulative_calibrator_removals.csv
+          echo '--- random nulls ---'
+          cat paper_gate/random_subset_nulls.csv
+          echo '--- anchors ---'
+          cat paper_gate/anchor_subset_gate.csv
+          echo '--- PV ---'
+          cat paper_gate/pv_zmin_gate.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-h0-superposition-paper-gate
+          path: paper_gate/
+          retention-days: 2
