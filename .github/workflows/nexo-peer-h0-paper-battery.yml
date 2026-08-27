@@ -11,5 +11,36 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
-      - name: RED contract tests
-        run: PYTHONPATH=. pytest -q tests/test_peer_h0_paper_battery.py
+      - name: Contract tests
+        run: PYTHONPATH=. pytest -q tests/test_peer_h0_paper_battery.py tests/test_shoes_host_jackknife.py
+      - name: Download SH0ES 2022 matrix data
+        run: |
+          mkdir -p input peer_h0_paper_battery
+          base='https://raw.githubusercontent.com/marcushogas/Cepheid-Distance-Ladder-Data/main/SH0ES2022'
+          curl -fL --retry 5 "$base/y_R22.txt" -o input/y_R22.txt
+          curl -fL --retry 5 "$base/L_R22.txt" -o input/L_R22.txt
+          curl -fL --retry 5 "$base/C_R22.txt" -o input/C_R22.txt
+          curl -fL --retry 5 "$base/q_R22.txt" -o input/q_R22.txt
+      - name: Download Pantheon+ data and covariance
+        run: |
+          base='https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/Pantheon%2B_Data/4_DISTANCES_AND_COVAR'
+          curl -fL --retry 5 "$base/Pantheon%2BSH0ES.dat" -o input/Pantheon+SH0ES.dat
+          curl -fL --retry 5 "$base/Pantheon%2BSH0ES_STAT%2BSYS.cov" -o input/Pantheon+SH0ES_STAT+SYS.cov
+      - name: Run paper battery
+        run: |
+          PYTHONPATH=. python tools/peer_h0_paper_battery.py \
+            --shoes-y input/y_R22.txt --shoes-L input/L_R22.txt --shoes-C input/C_R22.txt --shoes-q input/q_R22.txt \
+            --pantheon-data 'input/Pantheon+SH0ES.dat' --pantheon-cov 'input/Pantheon+SH0ES_STAT+SYS.cov' \
+            --out peer_h0_paper_battery | tee peer_h0_paper_battery/run.log
+      - name: Readback
+        run: |
+          cat peer_h0_paper_battery/summary.json
+          echo '--- sequential calibrator removal ---'
+          cat peer_h0_paper_battery/sequential_calibrator_removal.csv
+          echo '--- PV z-cut stress ---'
+          cat peer_h0_paper_battery/pantheon_pv_zcut_stress.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-peer-h0-paper-battery
+          path: peer_h0_paper_battery/
+          retention-days: 3
