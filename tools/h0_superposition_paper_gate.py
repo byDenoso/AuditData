@@ -64,7 +64,7 @@ def fit_h0_fixed_om(z,mu,cov,om=.3114):
     cinv1=linalg.cho_solve(cf,one,check_finite=False)
     r=mu-mu70(z,om)
     cinvr=linalg.cho_solve(cf,r,check_finite=False)
-    a=-float(one@cinvr)/float(one@cinv1)  # a = 5 log10(H/70)
+    a=-float(one@cinvr)/float(one@cinv1)
     sig_a=math.sqrt(1/float(one@cinv1))
     h=70*10**(a/5)
     sig_h=math.log(10)/5*h*sig_a
@@ -112,12 +112,16 @@ def run_shoes_gate(a,out):
             rows.append(dict(strategy=label,k=k,subset=';'.join(subset),H0=h,sigma_H0=s,delta_H0=h-h0,residual_fraction=residual_fraction(h-h0,residual),distance_to_PEERlocal=h-PEER_LOCAL))
 
         vals=[]
-        nrand=350
-        seen=set()
-        while len(vals)<nrand:
-            subset=tuple(sorted(rng.choice(sn_keys,size=k,replace=False).tolist()))
-            if subset in seen: continue
-            seen.add(subset)
+        nrand=min(350, math.comb(len(sn_keys),k))
+        if nrand==math.comb(len(sn_keys),k) and nrand<=350:
+            subsets=list(itertools.combinations(sn_keys,k))
+        else:
+            seen=set(); subsets=[]
+            while len(subsets)<nrand:
+                subset=tuple(sorted(rng.choice(sn_keys,size=k,replace=False).tolist()))
+                if subset in seen: continue
+                seen.add(subset); subsets.append(subset)
+        for subset in subsets:
             D=subset_rows(keys,subset)
             q,cov,p=fit_delete_cached(y,L,params,cache,D,())
             h,s,_=get_h0(q,cov,p)
@@ -129,7 +133,6 @@ def run_shoes_gate(a,out):
     pd.DataFrame(rows).to_csv(out/'cumulative_calibrator_removals.csv',index=False)
     pd.DataFrame(random_rows).to_csv(out/'random_subset_nulls.csv',index=False)
 
-    # Geometric anchors, all subsets. MW is represented by the two MHW1 rows.
     anchor_map={
       'N4258':anchor_constraint_rows(sources,'N4258'),
       'LMC':anchor_constraint_rows(sources,'LMC'),
@@ -146,7 +149,6 @@ def run_shoes_gate(a,out):
     A=pd.DataFrame(ar).sort_values('delta_H0')
     A.to_csv(out/'anchor_subset_gate.csv',index=False)
 
-    # Robustness after explicitly removing the highest-leverage calibrator.
     key='N5584_2007af'
     D=subset_rows(keys,[key])
     q,cov,p=fit_delete_cached(y,L,params,cache,D,())
@@ -169,7 +171,6 @@ def run_pv_gate(a,out):
     cal=d.IS_CALIBRATOR.to_numpy(int)
     rows=[]
     for zmin in [.005,.01,.015,.023,.03,.05,.075]:
-        # Same physical objects selected with zHD; only the redshift definition changes.
         m=(cal==0)&np.isfinite(zhd)&np.isfinite(zcmb)&np.isfinite(mu)&(zhd>=zmin)&(zhd<.15)
         idx=np.where(m)[0]; cov=C[np.ix_(idx,idx)]
         hhd,shd,_=fit_h0_fixed_om(zhd[idx],mu[idx],cov)
@@ -187,7 +188,7 @@ def main():
     ap.add_argument('--out',default='paper_gate')
     a=ap.parse_args(); out=Path(a.out); out.mkdir(parents=True,exist_ok=True)
     shoes=run_shoes_gate(a,out); pv=run_pv_gate(a,out)
-    cum=pd.read_csv(out/'cumulative_calibrator_removals.csv'); rnd=pd.read_csv(out/'random_subset_nulls.csv'); anc=pd.read_csv(out/'anchor_subset_gate.csv')
+    cum=pd.read_csv(out/'cumulative_calibrator_removals.csv'); rnd=pd.read_csv(out/'random_subset_nulls.csv')
     bestdown=cum[cum.strategy=='most_down'].sort_values('H0').iloc[0]
     verdict={
       'SH0ES':shoes,'PV':pv,
@@ -206,7 +207,7 @@ def main():
     print(json.dumps(verdict,indent=2))
     print('\nCUMULATIVE REMOVALS\n',cum.to_string(index=False))
     print('\nRANDOM SUBSET NULLS\n',rnd.to_string(index=False))
-    print('\nANCHORS\n',anc.to_string(index=False))
+    print('\nANCHORS\n',pd.read_csv(out/'anchor_subset_gate.csv').to_string(index=False))
     print('\nPV ZMIN\n',pd.read_csv(out/'pv_zmin_gate.csv').to_string(index=False))
 
 if __name__=='__main__': main()
