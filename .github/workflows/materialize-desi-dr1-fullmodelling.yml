@@ -30,6 +30,9 @@ jobs:
           done
           (cd desi_dr1_fullmodelling && sha256sum *.h5 > SHA256SUMS.txt && ls -lah > FILES.txt)
 
+      - name: Install HDF5 reader
+        run: python -m pip install --quiet h5py
+
       - name: Validate HDF5 payloads
         shell: bash
         run: |
