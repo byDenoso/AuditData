@@ -32,6 +32,7 @@ def test_h0_from_fivelogh0():
 
 def test_anchor_constraint_rows_remove_only_geometric_prior():
     from tools.shoes_host_jackknife import anchor_constraint_rows
-    s=np.array(['LMC_HST','LMC_GRND','SMC','mu_LMC','N4258','mu_N4258'])
-    assert anchor_constraint_rows(s,'LMC').tolist()==[3]
-    assert anchor_constraint_rows(s,'N4258').tolist()==[5]
+    s=np.array(['MHW1_HST','MHW1_Gaia','LMC_HST','LMC_GRND','SMC','mu_LMC','N4258','mu_N4258'])
+    assert anchor_constraint_rows(s,'LMC').tolist()==[5]
+    assert anchor_constraint_rows(s,'N4258').tolist()==[7]
+    assert anchor_constraint_rows(s,'MW').tolist()==[0,1]
