@@ -1,21 +1,12 @@
-import json, pathlib, yaml
+import json, pathlib
 import camb
 from cobaya.run import run
-from fs_bao_likelihoods.desi_fs_bao_all import desi_fs_bao_all as DESILikelihood
-from fs_bao_likelihoods.reptvelocileptors import reptvelocileptors as REPTTheory
 
 ROOT=pathlib.Path('.').resolve()
-DATA=str(ROOT/'data/likelihood')
 OUT=ROOT/'results'; OUT.mkdir(exist_ok=True)
-TRACERS=['bgs_z0','lrg_z0','lrg_z1','lrg_z2','elg_z1','qso_z0']
-official=yaml.safe_load((ROOT/'desi_official/dr1/cobaya/desi_fs_bao_all.yaml').read_text())
-nuisance={k:v for k,v in official['params'].items() if k.startswith('pre_')}
+COMPONENT='fs_bao_likelihoods.desi_fs_bao_all_nolya'
+THEORY_COMPONENT='fs_bao_likelihoods.reptvelocileptors'
 
-class ConfiguredDESILikelihood(DESILikelihood):
-    data_dir=DATA
-    observable_name='spectrum-poles-rotated+bao-recon'
-    tracers=TRACERS
-    solve='marg'
 
 def camb_sigma8(model, As):
     common=dict(H0=model['H0'],ombh2=model['ombh2'],omch2=model['omch2'],mnu=0.06,
@@ -28,11 +19,13 @@ def camb_sigma8(model, As):
     p.set_matter_power(redshifts=[0.0],kmax=2.0)
     return float(camb.get_results(p).get_sigma8_0())
 
+
 def tune_As(model):
     As=2.1e-9
     for _ in range(3):
         As *= (model['sigma8_target']/camb_sigma8(model,As))**2
     return As,camb_sigma8(model,As)
+
 
 MODELS={
  'UAC0P':dict(kind='uac',H0=70.84499,ombh2=0.022920,omch2=0.124814,ns=0.98958,
@@ -41,23 +34,23 @@ MODELS={
              sigma8_target=0.799182)
 }
 
-def make_info(name,m,As,tracers,suffix):
-    params={'H0':m['H0'],'ombh2':m['ombh2'],'omch2':m['omch2'],'As':As,'ns':m['ns'],'tau':0.0544,'mnu':0.06}
-    if m['kind']=='uac': params|={'n':3.0,'zc':m['zc'],'fde_zc':m['fde_zc'],'theta_i':m['theta_i']}
-    params|=nuisance
+
+def make_info(name,m,As,suffix='all'):
+    params={'H0':m['H0'],'ombh2':m['ombh2'],'omch2':m['omch2'],'As':As,
+            'ns':m['ns'],'tau':0.0544,'mnu':0.06}
+    if m['kind']=='uac':
+        params |= {'n':3.0,'zc':m['zc'],'fde_zc':m['fde_zc'],'theta_i':m['theta_i']}
     extra={'num_massive_neutrinos':1,'nnu':3.044,'lens_potential_accuracy':0}
-    if m['kind']=='uac': extra|={'dark_energy_model':'EarlyQuintessence','use_zc':True}
-    # The official likelihood class is unchanged; only runtime attributes are fixed here.
-    ConfiguredDESILikelihood.tracers=tracers
+    if m['kind']=='uac':
+        extra |= {'dark_energy_model':'EarlyQuintessence','use_zc':True}
     return {
-      'theory':{
-        'camb':{'extra_args':extra,'speed':2},
-        'reptvelocileptors':{'external':REPTTheory}},
-      'likelihood':{
-        'desi_fs_bao_all':{'external':ConfiguredDESILikelihood}},
+      'theory':{'camb':{'extra_args':extra,'speed':2},THEORY_COMPONENT:None},
+      'likelihood':{COMPONENT:None},
       'params':params,
-      'sampler':{'minimize':{'method':'scipy','ignore_prior':False,'best_of':1,'seed':20260827,'max_evals':5000}},
+      'sampler':{'minimize':{'method':'scipy','ignore_prior':False,'best_of':1,
+                             'seed':20260827,'max_evals':5000}},
       'output':str(OUT/f'{name}_{suffix}'),'force':True,'stop_at_error':True}
+
 
 def point_dict(pt):
     out={'text':str(pt)}
@@ -66,8 +59,10 @@ def point_dict(pt):
             v=getattr(pt,a); v=v() if callable(v) else v
             if hasattr(v,'tolist'): v=v.tolist()
             out[a]=v
-        except Exception as e: out[a+'_error']=str(e)
+        except Exception as e:
+            out[a+'_error']=str(e)
     return out
+
 
 def parse(prefix):
     candidates=[OUT/f'{prefix}.minimum.txt',OUT/f'{prefix}.bestfit.txt']
@@ -75,14 +70,18 @@ def parse(prefix):
     ls=[x for x in path.read_text().splitlines() if x.strip()]
     return {k:float(v) for k,v in zip(ls[0].lstrip('#').split(),ls[-1].split())}
 
-summary={'contract':'official DESI DR1 FS+BAO six-tracer likelihood; fixed cosmology; native REPT/velocileptors; official nuisance priors+marginalization','tracers':TRACERS,'models':{},'environment':{'camb':camb.__version__}}
+summary={
+ 'contract':'official generated DESI DR1 desi_fs_bao_all_nolya; six galaxy/QSO tracers; native REPT/velocileptors; official nuisance priors and analytic marginalization; fixed cosmology',
+ 'component':COMPONENT,'models':{},'environment':{'camb':camb.__version__}}
 for name,m in MODELS.items():
     As,s=tune_As(m); m['As']=As; m['sigma8_realized']=s
     print(name,'As',As,'sigma8',s,flush=True)
-    updated,sampler=run(make_info(name,m,As,TRACERS,'all'),no_mpi=True)
+    updated,sampler=run(make_info(name,m,As),no_mpi=True)
     prod=sampler.products()
-    summary['models'][name]={'input':m,'bestfit':point_dict(prod['minimum']),'full_set_of_mins':str(prod.get('full_set_of_mins'))}
+    summary['models'][name]={'input':m,'bestfit':point_dict(prod['minimum']),
+                             'full_set_of_mins':str(prod.get('full_set_of_mins'))}
     (OUT/f'{name}_updated.json').write_text(json.dumps(updated,default=str,indent=2))
+
 try:
     summary['tables']={'UAC0P':parse('UAC0P_all'),'LCDM':parse('LCDM_all')}
 except Exception as e:
