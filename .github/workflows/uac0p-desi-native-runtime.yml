@@ -1,0 +1,48 @@
+name: UAC0P DESI Native Runtime Probe
+on:
+  push:
+    branches: [uac0p-desi-native-bridge-20260827]
+jobs:
+  probe-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout LH-Data
+        uses: actions/checkout@v4
+        with:
+          repository: byDenoso/LH-Data
+          ref: feature/nova-portable-rust-jax
+          path: lhdata
+      - name: Probe runtime and full-shape stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_probe
+          echo "== python ==" | tee runtime_probe/summary.txt
+          python --version | tee -a runtime_probe/summary.txt
+          echo "== EarlyQuintessence files ==" | tee -a runtime_probe/summary.txt
+          grep -RIl --exclude-dir=.git 'EarlyQuintessence' lhdata 2>/dev/null | head -200 | tee runtime_probe/earlyquintessence_files.txt || true
+          echo "== DESI/full-shape relevant files ==" | tee -a runtime_probe/summary.txt
+          grep -RIl --exclude-dir=.git -E 'desilike|velocileptors|full[-_ ]?shape|FullModell|likelihood_spectrum-poles|ShapeFit' lhdata 2>/dev/null | head -400 | tee runtime_probe/fullshape_files.txt || true
+          echo "== likely python modules ==" | tee -a runtime_probe/summary.txt
+          find lhdata -type f \( -name '*.py' -o -name '*.yml' -o -name '*.yaml' -o -name '*.toml' \) | grep -Ei 'peer|camb|desi|shape|eft|likelihood' | head -500 | tee runtime_probe/candidate_files.txt || true
+          echo "== wheels/archives ==" | tee -a runtime_probe/summary.txt
+          find lhdata -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.tar.zst' -o -name '*.zip' \) | head -300 | tee runtime_probe/local_archives.txt || true
+          echo "== pip packages ==" | tee -a runtime_probe/summary.txt
+          python -m pip list | tee runtime_probe/pip_list.txt
+      - name: Capture key source snippets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_probe/snippets
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            b=$(echo "$f" | sed 's#/#__#g')
+            { echo "### $f"; sed -n '1,260p' "$f"; } > "runtime_probe/snippets/${b}.txt" || true
+          done < <(cat runtime_probe/earlyquintessence_files.txt runtime_probe/fullshape_files.txt | sort -u | head -80)
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uac0p-runtime-probe
+          path: runtime_probe/
+          compression-level: 6
+          retention-days: 3
