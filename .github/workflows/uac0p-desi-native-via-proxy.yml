@@ -12,6 +12,7 @@ jobs:
     env:
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
+
       MKL_NUM_THREADS: '2'
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +31,7 @@ jobs:
           git clone --depth 1 https://github.com/cosmodesi/desi-kp-cosmological-likelihoods.git desi_official
           mkdir -p fs_bao_likelihoods data/likelihood results
           cp desi_official/dr1/cobaya/*.py fs_bao_likelihoods/
+          cp desi_official/dr1/cobaya/*.yaml fs_bao_likelihoods/
           touch fs_bao_likelihoods/__init__.py
           python - <<'PY'
           import requests, pathlib, hashlib, json, concurrent.futures
@@ -55,6 +57,17 @@ jobs:
               manifest=list(ex.map(get,names))
           pathlib.Path('results/DESI_DR1_NATIVE_INPUT_MANIFEST.json').write_text(json.dumps(manifest,indent=2))
           PY
+          python - <<'PY'
+          import pathlib, yaml
+          p=pathlib.Path('fs_bao_likelihoods/desi_fs_bao_all.yaml')
+          cfg=yaml.safe_load(p.read_text())
+          cfg['data_dir']=str(pathlib.Path('data/likelihood').resolve())
+          p.write_text(yaml.safe_dump(cfg,sort_keys=False))
+          PY
+          (cd fs_bao_likelihoods && python generate_files_fs_bao.py)
+          test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.py
+          test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.yaml
+          grep -E '^(data_dir|tracers|observable_name|solve):' fs_bao_likelihoods/desi_fs_bao_all_nolya.yaml || true
       - name: Run fixed-cosmology native nuisance profile
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python uac0p_native/fit_native.py
