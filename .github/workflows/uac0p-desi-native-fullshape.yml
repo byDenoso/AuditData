@@ -1,0 +1,191 @@
+name: UAC0P DESI DR1 native full-shape gate
+
+on:
+  push:
+    branches: [uac0p-desi-native-20260827]
+  workflow_dispatch:
+
+jobs:
+  native-fullshape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install scientific stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'camb==1.6.6' 'cobaya>=3.5,<3.7' scipy numpy h5py pyyaml requests beautifulsoup4 pybobyqa
+          python -m pip install git+https://github.com/adematti/lsstypes.git
+          python -m pip install git+https://github.com/cosmodesi/cosmoprimo.git
+          python -m pip install velocileptors
+      - name: Stage official DESI likelihood implementation and six DR1 likelihood files
+        run: |
+          git clone --depth 1 https://github.com/cosmodesi/desi-kp-cosmological-likelihoods.git desi_official
+          mkdir -p fs_bao_likelihoods data/likelihood results
+          cp desi_official/dr1/cobaya/*.py fs_bao_likelihoods/
+          touch fs_bao_likelihoods/__init__.py
+          python - <<'PY'
+          import requests, pathlib, hashlib, json
+          base='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/v1.0/data/likelihood/'
+          names=[
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5',
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5',
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5',
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5',
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5',
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5']
+          out=pathlib.Path('data/likelihood'); manifest=[]
+          for name in names:
+              r=requests.get(base+name,timeout=120); r.raise_for_status(); p=out/name; p.write_bytes(r.content)
+              manifest.append({'name':name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          pathlib.Path('results/DESI_DR1_NATIVE_INPUT_MANIFEST.json').write_text(json.dumps(manifest,indent=2))
+          print(json.dumps(manifest,indent=2))
+          PY
+      - name: Run fixed cosmology nuisance-profile gate
+        run: |
+          cat > fit_native.py <<'PY'
+          import os, json, math, pathlib, yaml, traceback
+          import numpy as np
+          import camb
+          from cobaya.run import run
+
+          ROOT=pathlib.Path('.').resolve()
+          DATA=str(ROOT/'data/likelihood')
+          OUT=ROOT/'results'; OUT.mkdir(exist_ok=True)
+          TRACERS=['bgs_z0','lrg_z0','lrg_z1','lrg_z2','elg_z1','qso_z0']
+
+          # Official nuisance definitions, restricted to the six galaxy/QSO full-shape tracers.
+          official=yaml.safe_load((ROOT/'desi_official/dr1/cobaya/desi_fs_bao_all.yaml').read_text())
+          nuisance={}
+          for k,v in official['params'].items():
+              if k.startswith('pre_'):
+                  nuisance[k]=v
+
+          def camb_sigma8(model, As):
+              common=dict(H0=model['H0'],ombh2=model['ombh2'],omch2=model['omch2'],mnu=0.06,
+                          tau=0.0544,As=As,ns=model['ns'],num_massive_neutrinos=1,nnu=3.044)
+              if model['kind']=='uac':
+                  p=camb.set_params(**common,dark_energy_model='EarlyQuintessence',use_zc=True,
+                                    n=3.0,zc=model['zc'],fde_zc=model['fde_zc'],theta_i=model['theta_i'])
+              else:
+                  p=camb.set_params(**common)
+              p.set_matter_power(redshifts=[0.0],kmax=2.0)
+              r=camb.get_results(p)
+              return float(r.get_sigma8_0())
+
+          def tune_As(model):
+              As=2.1e-9
+              for _ in range(3):
+                  s=camb_sigma8(model,As)
+                  As*= (model['sigma8_target']/s)**2
+              s=camb_sigma8(model,As)
+              return As,s
+
+          MODELS={
+            'UAC0P': dict(kind='uac',H0=70.84499,ombh2=0.022920,omch2=0.124814,ns=0.98958,
+                         sigma8_target=0.81853,zc=10**3.81,fde_zc=0.080503,theta_i=2.89155),
+            'LCDM': dict(kind='lcdm',H0=68.751,ombh2=0.0226180693,omch2=0.11698460023,ns=0.9669,
+                         sigma8_target=0.799182)
+          }
+
+          def make_info(name, model, As, tracers, suffix):
+              params={
+                'H0':model['H0'],'ombh2':model['ombh2'],'omch2':model['omch2'],
+                'As':As,'ns':model['ns'],'tau':0.0544,'mnu':0.06,
+              }
+              if model['kind']=='uac':
+                  params |= {'n':3.0,'zc':model['zc'],'fde_zc':model['fde_zc'],'theta_i':model['theta_i']}
+              params |= nuisance
+              extra={'num_massive_neutrinos':1,'nnu':3.044,'lens_potential_accuracy':0}
+              if model['kind']=='uac': extra |= {'dark_energy_model':'EarlyQuintessence','use_zc':True}
+              info={
+                'theory':{
+                  'camb':{'extra_args':extra,'speed':2},
+                  'fs_bao_likelihoods.reptvelocileptors':None,
+                },
+                'likelihood':{
+                  'fs_bao_likelihoods.desi_fs_bao_all':{
+                    'data_dir':DATA,'observable_name':'spectrum-poles-rotated+bao-recon','tracers':tracers,
+                    'solve':'marg'
+                  }
+                },
+                'params':params,
+                'sampler':{'minimize':{'method':'bobyqa','ignore_prior':False,'best_of':2,'seed':20260827,
+                                        'max_evals':10000,'override_bobyqa':{'rhoend':0.01}}},
+                'output':str(OUT/f'{name}_{suffix}'),
+                'force':True,'stop_at_error':True
+              }
+              return info
+
+          def point_dict(point):
+              out={}
+              for attr in ['logpost','logpriors','loglikes','derived']:
+                  try:
+                      v=getattr(point,attr)
+                      if callable(v): v=v()
+                      if hasattr(v,'tolist'): v=v.tolist()
+                      out[attr]=v
+                  except Exception as e: out[attr+'_error']=str(e)
+              try: out['sampled']=dict(zip(point.sampled_params,point.data[:len(point.sampled_params)]))
+              except Exception: pass
+              try: out['text']=str(point)
+              except Exception: pass
+              return out
+
+          summary={'contract':'official DESI DR1 FS+BAO six-tracer likelihood; fixed cosmology; native REPT/velocileptors; official nuisance priors+marginalization',
+                   'tracers':TRACERS,'models':{},'environment':{'camb':camb.__version__}}
+          for name,m in MODELS.items():
+              As,s=tune_As(m); m['As']=As; m['sigma8_realized']=s
+              print(name,'As',As,'sigma8',s,flush=True)
+              info=make_info(name,m,As,TRACERS,'all')
+              updated,sampler=run(info,no_mpi=True)
+              prod=sampler.products(); pt=prod['minimum']
+              summary['models'][name]={'input':m,'bestfit':point_dict(pt),'full_set_of_mins':str(prod.get('full_set_of_mins'))}
+              (OUT/f'{name}_updated.json').write_text(json.dumps(updated,default=str,indent=2))
+
+          # Parse Cobaya best-fit tables for authoritative chi2 columns.
+          def parse_bestfit(prefix):
+              path=OUT/f'{prefix}.minimum.txt'
+              if not path.exists(): path=OUT/f'{prefix}.bestfit.txt'
+              lines=[x for x in path.read_text().splitlines() if x.strip()]
+              header=lines[0].lstrip('#').split()
+              vals=lines[-1].split()
+              return {k:float(v) for k,v in zip(header,vals)}
+          try:
+              summary['tables']={'UAC0P':parse_bestfit('UAC0P_all'),'LCDM':parse_bestfit('LCDM_all')}
+          except Exception as e:
+              summary['table_parse_error']=repr(e)
+
+          # Extract total likelihood chi2 from individual chi2__ columns if present.
+          for name in ['UAC0P','LCDM']:
+              tab=summary.get('tables',{}).get(name,{})
+              chis={k:v for k,v in tab.items() if k.startswith('chi2__')}
+              summary['models'][name]['chi2_components']=chis
+              summary['models'][name]['chi2_likelihood_sum']=sum(chis.values()) if chis else None
+          u=summary['models']['UAC0P']['chi2_likelihood_sum']; l=summary['models']['LCDM']['chi2_likelihood_sum']
+          if u is not None and l is not None:
+              summary['delta_chi2_UAC0P_minus_LCDM']=u-l
+          (OUT/'NEXO_UAC0P_DESI_DR1_NATIVE_FULLSHAPE_GATE.json').write_text(json.dumps(summary,indent=2,default=str))
+          print(json.dumps(summary,indent=2,default=str),flush=True)
+          PY
+          PYTHONPATH="$PWD:$PYTHONPATH" python fit_native.py
+      - name: Hash outputs
+        if: always()
+        run: |
+          find results -type f -maxdepth 2 -print0 | sort -z | xargs -0 sha256sum > results/SHA256SUMS.txt || true
+          cat results/SHA256SUMS.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uac0p-desi-dr1-native-fullshape
+          path: |
+            results/
+            fit_native.py
+          retention-days: 1
