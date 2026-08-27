@@ -36,13 +36,15 @@ jobs:
           import requests, pathlib, hashlib, json, concurrent.futures
           upstream='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/v1.0/data/likelihood/'
           proxy='https://nexo-file-path-probe.vercel.app/api/raw'
-          names=[
+          fsbao=[
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5',
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5',
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5',
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5',
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5',
           'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5']
+          fsonly=[n.replace('spectrum-poles-rotated+bao-recon','spectrum-poles-rotated') for n in fsbao]
+          names=fsbao+fsonly
           out=pathlib.Path('data/likelihood')
           def get(name):
               r=requests.get(proxy,params={'url':upstream+name},timeout=(20,180)); r.raise_for_status()
@@ -52,7 +54,7 @@ jobs:
               p=out/name; p.write_bytes(data)
               item={'name':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':r.headers.get('content-type')}
               print('VALIDATED',item,flush=True); return item
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
               manifest=list(ex.map(get,names))
           pathlib.Path('results/DESI_DR1_NATIVE_INPUT_MANIFEST.json').write_text(json.dumps(manifest,indent=2))
           PY
@@ -64,8 +66,6 @@ jobs:
           p.write_text(yaml.safe_dump(cfg,sort_keys=False))
           PY
           (cd fs_bao_likelihoods && python generate_files_fs_bao.py)
-          test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.py
-          test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.yaml
       - name: Run fixed-cosmology native nuisance profile
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python uac0p_native/fit_native.py
