@@ -29,6 +29,11 @@ def drop_host(y,L,C,sources,params,host):
     return y[keep],L[keep][:,pkeep],C[np.ix_(keep,keep)],[p for p,k in zip(params,pkeep) if k]
 
 
+def anchor_constraint_rows(sources,anchor):
+    sources=np.asarray(sources,str)
+    return np.where(sources=='mu_'+anchor)[0]
+
+
 def build_precision_cache(y,L,C):
     cf=linalg.cho_factor(C,check_finite=False)
     P=linalg.cho_solve(cf,np.eye(C.shape[0]),check_finite=False)
@@ -46,13 +51,9 @@ def fit_delete_cached(y,L,params,cache,drop_rows,drop_params=()):
     else:
         P=cache['P']; B=cache['B']; py=cache['py']
         LD=L[D,:]; PD=P[np.ix_(D,D)]; BD=B[D,:]; yD=y[D]; pyD=py[D]
-        # T = P_DR L_R = B_D - P_DD L_D
         T=BD-PD@LD
-        # L_R^T P_RR L_R, obtained from the full normal matrix.
         A0=cache['A']-LD.T@BD-BD.T@LD+LD.T@PD@LD
-        # L_R^T P_RR y_R.
         g0=cache['g']-T.T@yD-LD.T@pyD
-        # Schur complement: inverse covariance of retained observations.
         S=linalg.inv(PD,check_finite=False)
         v=pyD-PD@yD
         A=A0-T.T@S@T
@@ -98,7 +99,6 @@ def main():
     cov0=linalg.inv(cache['A'],check_finite=False); q0=cov0@cache['g']; h0,s0,f0=get_h0(q0,cov0,params)
     if abs(h0-73.04)>0.08: raise RuntimeError(f'baseline reproduction failed: H0={h0}')
 
-    # Verify cached-deletion algebra against direct GLS on one real host.
     qa,ca,pa=fit_delete_cached(y,L,params,cache,np.where((sources=='M101')|np.char.startswith(sources,'M101_'))[0],['mu_M101'])
     yy,LL,CC,pp=drop_host(y,L,C,sources,params,'M101')
     qd,cd=gls_fit(yy,LL,CC)
@@ -117,7 +117,6 @@ def main():
     H=pd.DataFrame(host_rows).sort_values('delta_H0')
     H.to_csv(out/'leave_one_host_out.csv',index=False)
 
-    # Physical calibrator SN jackknife: collapse repeated survey photometry of the same event.
     keys=np.array([physical_calibrator_key(s,hosts) or '' for s in sources])
     sn_rows=[]
     for key in sorted(set(keys)-{''}):
@@ -129,30 +128,22 @@ def main():
     S=pd.DataFrame(sn_rows).sort_values('delta_H0')
     S.to_csv(out/'leave_one_calibrator_sn_out.csv',index=False)
 
-    # Anchor-constraint jackknife: remove only external rows carrying an anchor distance coefficient,
-    # while retaining its Cepheid data and its distance parameter as free.
     anchor_rows=[]
     for anchor in ['N4258','LMC']:
-        j=params.index('mu_'+anchor)
-        nz=np.where(np.abs(L[:,j])>1e-12)[0]
-        # Cepheid rows have Source==anchor. Everything else using this column is an external geometric constraint.
-        D=nz[sources[nz]!=anchor]
+        D=anchor_constraint_rows(sources,anchor)
         q,cov,p=fit_delete_cached(y,L,params,cache,D,())
         h,s,_=get_h0(q,cov,p)
         anchor_rows.append(dict(anchor=anchor,n_constraint_rows_dropped=len(D),constraint_sources=';'.join(sorted(set(sources[D]))),H0=h,sigma_H0=s,delta_H0=h-h0,delta_sigma=(h-h0)/s0,equiv_delta_mu=-5*np.log10(h/h0)))
     A=pd.DataFrame(anchor_rows)
     A.to_csv(out/'leave_one_anchor_constraint_out.csv',index=False)
 
-    # M31 is a non-SN Cepheid host in this parameterization: remove it as a structural control.
     D=np.where(sources=='M31')[0]
     qm,cm,pm=fit_delete_cached(y,L,params,cache,D,['mu_M31'])
     hm,sm,_=get_h0(qm,cm,pm)
 
-    # Influence concentration / falsifiers.
     Habs=H.assign(abs_delta=lambda x:abs(x.delta_H0)).sort_values('abs_delta',ascending=False)
     Sabs=S.assign(abs_delta=lambda x:abs(x.delta_H0)).sort_values('abs_delta',ascending=False)
     required_from_peer_local=73.0-71.92804067892604
-    # A few diagnostic source labels for external rows, to make anchor interpretation auditable.
     ext_mask=np.ones(len(sources),dtype=bool)
     for h in hosts+['N4258','LMC','M31']:
         ext_mask &= (sources!=h)
@@ -163,32 +154,14 @@ def main():
     summary={
       'data_source':'marcushogas/Cepheid-Distance-Ladder-Data SH0ES2022; modified text representation of Riess et al. 2022 matrices',
       'baseline':{'H0':h0,'sigma_H0':s0,'five_log_H0':f0,'n_obs':len(y),'n_params':len(params)},
-      'host_jackknife':{
-        'n_hosts':len(H),'H0_min':float(H.H0.min()),'H0_max':float(H.H0.max()),
-        'max_abs_shift':float(Habs.abs_delta.iloc[0]),'max_host':str(Habs.host.iloc[0]),
-        'top3_abs_shift_sum':float(Habs.abs_delta.head(3).sum()),
-        'n_abs_gt_0p2':int((Habs.abs_delta>0.2).sum()),'n_abs_gt_0p5':int((Habs.abs_delta>0.5).sum()),
-        'top8':Habs.head(8).to_dict(orient='records')},
-      'calibrator_sn_jackknife':{
-        'n_physical_sne':len(S),'H0_min':float(S.H0.min()),'H0_max':float(S.H0.max()),
-        'max_abs_shift':float(Sabs.abs_delta.iloc[0]),'max_SN':str(Sabs.calibrator_SN.iloc[0]),
-        'top5_abs_shift_sum':float(Sabs.abs_delta.head(5).sum()),
-        'n_abs_gt_0p2':int((Sabs.abs_delta>0.2).sum()),'n_abs_gt_0p5':int((Sabs.abs_delta>0.5).sum()),
-        'top10':Sabs.head(10).to_dict(orient='records')},
+      'host_jackknife':{'n_hosts':len(H),'H0_min':float(H.H0.min()),'H0_max':float(H.H0.max()),'max_abs_shift':float(Habs.abs_delta.iloc[0]),'max_host':str(Habs.host.iloc[0]),'top3_abs_shift_sum':float(Habs.abs_delta.head(3).sum()),'n_abs_gt_0p2':int((Habs.abs_delta>0.2).sum()),'n_abs_gt_0p5':int((Habs.abs_delta>0.5).sum()),'top8':Habs.head(8).to_dict(orient='records')},
+      'calibrator_sn_jackknife':{'n_physical_sne':len(S),'H0_min':float(S.H0.min()),'H0_max':float(S.H0.max()),'max_abs_shift':float(Sabs.abs_delta.iloc[0]),'max_SN':str(Sabs.calibrator_SN.iloc[0]),'top5_abs_shift_sum':float(Sabs.abs_delta.head(5).sum()),'n_abs_gt_0p2':int((Sabs.abs_delta>0.2).sum()),'n_abs_gt_0p5':int((Sabs.abs_delta>0.5).sum()),'top10':Sabs.head(10).to_dict(orient='records')},
       'anchor_constraint_jackknife':A.to_dict(orient='records'),
       'M31_nonSN_host_control':{'n_rows_dropped':int(len(D)),'H0':hm,'sigma_H0':sm,'delta_H0':hm-h0},
       'peer_local_residual_to_73':required_from_peer_local,
-      'interpretation_rules':[
-        'Large individual leave-one-out shifts identify influential data, not automatically bad data.',
-        'Host and SN jackknives are correlated; their shifts must not be summed.',
-        'Anchor-constraint deletion removes the geometric constraint but retains Cepheids in that anchor.',
-        'The analysis targets concentration of the SH0ES ladder; it does not refit PEER.'
-      ]
+      'interpretation_rules':['Large individual leave-one-out shifts identify influential data, not automatically bad data.','Host and SN jackknives are correlated; their shifts must not be summed.','Anchor-constraint deletion removes only the geometric prior row and retains the Cepheid data.','The analysis targets concentration of the SH0ES ladder; it does not refit PEER.']
     }
     (out/'summary.json').write_text(json.dumps(summary,indent=2,default=float))
-    print(json.dumps(summary,indent=2,default=float))
-    print('\nTOP HOST INFLUENCE\n',Habs.head(12).to_string(index=False))
-    print('\nTOP SN INFLUENCE\n',Sabs.head(15).to_string(index=False))
-    print('\nANCHORS\n',A.to_string(index=False))
+    print(json.dumps(summary,indent=2,default=float)); print('\nTOP HOST INFLUENCE\n',Habs.head(12).to_string(index=False)); print('\nTOP SN INFLUENCE\n',Sabs.head(15).to_string(index=False)); print('\nANCHORS\n',A.to_string(index=False))
 
 if __name__=='__main__': main()
