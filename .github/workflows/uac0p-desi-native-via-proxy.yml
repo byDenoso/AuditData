@@ -12,7 +12,6 @@ jobs:
     env:
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
-
       MKL_NUM_THREADS: '2'
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +28,7 @@ jobs:
       - name: Stage official code and likelihoods through proxy
         run: |
           git clone --depth 1 https://github.com/cosmodesi/desi-kp-cosmological-likelihoods.git desi_official
-          mkdir -p fs_bao_likelihoods data/likelihood results
+          mkdir -p fs_bao_likelihoods data/likelihood results block_results
           cp desi_official/dr1/cobaya/*.py fs_bao_likelihoods/
           cp desi_official/dr1/cobaya/*.yaml fs_bao_likelihoods/
           touch fs_bao_likelihoods/__init__.py
@@ -67,18 +66,22 @@ jobs:
           (cd fs_bao_likelihoods && python generate_files_fs_bao.py)
           test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.py
           test -f fs_bao_likelihoods/desi_fs_bao_all_nolya.yaml
-          grep -E '^(data_dir|tracers|observable_name|solve):' fs_bao_likelihoods/desi_fs_bao_all_nolya.yaml || true
       - name: Run fixed-cosmology native nuisance profile
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python uac0p_native/fit_native.py
+      - name: Run tracer and FS-vs-BAO robustness battery
+        run: |
+          PYTHONPATH="$PWD:$PYTHONPATH" python uac0p_native/fit_blocks.py
       - name: Hash outputs
         if: always()
         run: |
-          find results -type f -print0 | sort -z | xargs -0 sha256sum > results/SHA256SUMS.txt || true
-          cat results/SHA256SUMS.txt || true
+          find results block_results -type f -print0 | sort -z | xargs -0 sha256sum > results/SHA256SUMS_ALL.txt || true
+          cat results/SHA256SUMS_ALL.txt || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: uac0p-desi-native-via-proxy
-          path: results/
+          name: uac0p-desi-native-via-proxy-battery
+          path: |
+            results/
+            block_results/
           retention-days: 1
