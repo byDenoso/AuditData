@@ -11,6 +11,12 @@ TRACERS=['bgs_z0','lrg_z0','lrg_z1','lrg_z2','elg_z1','qso_z0']
 official=yaml.safe_load((ROOT/'desi_official/dr1/cobaya/desi_fs_bao_all.yaml').read_text())
 nuisance={k:v for k,v in official['params'].items() if k.startswith('pre_')}
 
+class ConfiguredDESILikelihood(DESILikelihood):
+    data_dir=DATA
+    observable_name='spectrum-poles-rotated+bao-recon'
+    tracers=TRACERS
+    solve='marg'
+
 def camb_sigma8(model, As):
     common=dict(H0=model['H0'],ombh2=model['ombh2'],omch2=model['omch2'],mnu=0.06,
                 tau=0.0544,As=As,ns=model['ns'],num_massive_neutrinos=1,nnu=3.044)
@@ -41,13 +47,14 @@ def make_info(name,m,As,tracers,suffix):
     params|=nuisance
     extra={'num_massive_neutrinos':1,'nnu':3.044,'lens_potential_accuracy':0}
     if m['kind']=='uac': extra|={'dark_energy_model':'EarlyQuintessence','use_zc':True}
+    # The official likelihood class is unchanged; only runtime attributes are fixed here.
+    ConfiguredDESILikelihood.tracers=tracers
     return {
       'theory':{
         'camb':{'extra_args':extra,'speed':2},
         'reptvelocileptors':{'external':REPTTheory}},
       'likelihood':{
-        'desi_fs_bao_all':{'external':DESILikelihood,'data_dir':DATA,
-          'observable_name':'spectrum-poles-rotated+bao-recon','tracers':tracers,'solve':'marg'}},
+        'desi_fs_bao_all':{'external':ConfiguredDESILikelihood}},
       'params':params,
       'sampler':{'minimize':{'method':'scipy','ignore_prior':False,'best_of':1,'seed':20260827,'max_evals':5000}},
       'output':str(OUT/f'{name}_{suffix}'),'force':True,'stop_at_error':True}
