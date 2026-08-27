@@ -147,11 +147,20 @@ def run_shoes_gate(a,out):
             q,cov,p=fit_delete_cached(y,L,params,cache,D,())
             h,s,_=get_h0(q,cov,p)
             vals.append(h-h0)
-        vals=np.array(vals)
+        vals=np.asarray(vals,float)
         nrand=len(vals)
         obs_down=[r for r in rows if r['strategy']=='most_down' and r['k']==k][0]['delta_H0']
         obs_abs=[r for r in rows if r['strategy']=='largest_abs' and r['k']==k][0]['delta_H0']
-        random_rows.append(dict(k=k,n_subsets=nrand,exact_enumeration=exact,total_combinations=total,median_delta=float(np.median(vals)),p05=float(np.quantile(vals,.05)),p95=float(np.quantile(vals,.95)),p_as_low_or_lower=float((np.sum(vals<=obs_down)+(0 if exact else 1))/(nrand+(0 if exact else 1))),p_abs_ge_topabs=float((np.sum(np.abs(vals)>=abs(obs_abs))+(0 if exact else 1))/(nrand+(0 if exact else 1))),p_abs_ge_full_residual=float((np.sum(np.abs(vals)>=residual)+(0 if exact else 1))/(nrand+(0 if exact else 1))))
+        add=0 if exact else 1
+        denom=nrand+add
+        stat=dict(
+            k=k,n_subsets=nrand,exact_enumeration=exact,total_combinations=total,
+            median_delta=float(np.median(vals)),p05=float(np.quantile(vals,.05)),p95=float(np.quantile(vals,.95)),
+            p_as_low_or_lower=float((np.sum(vals<=obs_down)+add)/denom),
+            p_abs_ge_topabs=float((np.sum(np.abs(vals)>=abs(obs_abs))+add)/denom),
+            p_abs_ge_full_residual=float((np.sum(np.abs(vals)>=residual)+add)/denom)
+        )
+        random_rows.append(stat)
     Cum=pd.DataFrame(rows); Cum.to_csv(out/'cumulative_calibrator_removals.csv',index=False)
     Rnd=pd.DataFrame(random_rows); Rnd.to_csv(out/'random_subset_nulls.csv',index=False)
 
