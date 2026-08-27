@@ -13,3 +13,31 @@ jobs:
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
       - name: Contract tests
         run: PYTHONPATH=. pytest -q tests/test_shoes_host_jackknife.py
+      - name: Download SH0ES 2022 matrix data
+        run: |
+          mkdir -p input shoes_jackknife
+          base='https://raw.githubusercontent.com/marcushogas/Cepheid-Distance-Ladder-Data/main/SH0ES2022'
+          curl -fL --retry 5 "$base/y_R22.txt" -o input/y_R22.txt
+          curl -fL --retry 5 "$base/L_R22.txt" -o input/L_R22.txt
+          curl -fL --retry 5 "$base/C_R22.txt" -o input/C_R22.txt
+          curl -fL --retry 5 "$base/q_R22.txt" -o input/q_R22.txt
+          wc -l input/y_R22.txt input/L_R22.txt input/C_R22.txt input/q_R22.txt
+      - name: Run host / calibrator / anchor null battery
+        run: |
+          PYTHONPATH=. python tools/shoes_host_jackknife.py \
+            --y input/y_R22.txt --L input/L_R22.txt --C input/C_R22.txt --q input/q_R22.txt \
+            --out shoes_jackknife | tee shoes_jackknife/run.log
+      - name: Readback
+        run: |
+          cat shoes_jackknife/summary.json
+          echo '--- HOSTS ---'
+          head -15 shoes_jackknife/leave_one_host_out.csv
+          echo '--- CAL SNE ---'
+          head -20 shoes_jackknife/leave_one_calibrator_sn_out.csv
+          echo '--- ANCHORS ---'
+          cat shoes_jackknife/leave_one_anchor_constraint_out.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-shoes-host-jackknife
+          path: shoes_jackknife/
+          retention-days: 2
