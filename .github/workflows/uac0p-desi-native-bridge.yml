@@ -1,0 +1,36 @@
+name: UAC0P DESI Native Bridge
+on:
+  push:
+    branches: [uac0p-desi-native-bridge-20260827]
+jobs:
+  fetch-desi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download six official DESI DR1 Full-Modelling likelihoods
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p desi_hdf5
+          BASE='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/v1.0/data/likelihood'
+          files=(
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5'
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5'
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5'
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5'
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5'
+          'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5'
+          )
+          for f in "${files[@]}"; do
+            echo "Downloading $f"
+            curl -fL --retry 4 --retry-delay 3 "$BASE/$f" -o "desi_hdf5/$f"
+            test -s "desi_hdf5/$f"
+          done
+          sha256sum desi_hdf5/*.h5 | tee desi_hdf5/SHA256SUMS.txt
+          ls -lh desi_hdf5
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uac0p-desi-dr1-hdf5
+          path: desi_hdf5/
+          compression-level: 0
+          retention-days: 3
