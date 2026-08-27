@@ -153,6 +153,9 @@ def main():
     ext_counts=pd.Series(sources[ext_mask]).value_counts().head(30)
     ext_counts.rename_axis('source').reset_index(name='count').to_csv(out/'external_source_labels_top30.csv',index=False)
 
+    from tools.h0_superposition_kill_tests import run_superposition_battery
+    superposition=run_superposition_battery(y,L,C,params,sources,cache,hosts,S,out,nmocks=50000)
+
     summary={
       'data_source':'marcushogas/Cepheid-Distance-Ladder-Data SH0ES2022; modified text representation of Riess et al. 2022 matrices',
       'baseline':{'H0':h0,'sigma_H0':s0,'five_log_H0':f0,'n_obs':len(y),'n_params':len(params)},
@@ -161,7 +164,8 @@ def main():
       'anchor_constraint_jackknife':A.to_dict(orient='records'),
       'M31_nonSN_host_control':{'n_rows_dropped':int(len(D)),'H0':hm,'sigma_H0':sm,'delta_H0':hm-h0},
       'peer_local_residual_to_73':required_from_peer_local,
-      'interpretation_rules':['Large individual leave-one-out shifts identify influential data, not automatically bad data.','Host and SN jackknives are correlated; their shifts must not be summed.','Anchor-constraint deletion removes only the geometric prior rows and retains the Cepheid data.','The analysis targets concentration of the SH0ES ladder; it does not refit PEER.']
+      'superposition_kill_tests':superposition,
+      'interpretation_rules':['Large individual leave-one-out shifts identify influential data, not automatically bad data.','Host and SN jackknives are correlated; their shifts must not be summed.','Anchor-constraint deletion removes only the geometric prior rows and retains the Cepheid data.','PEER and local-environment inputs are frozen external values in the superposition battery; they are not refit to SH0ES.']
     }
     (out/'summary.json').write_text(json.dumps(summary,indent=2,default=float))
     print(json.dumps(summary,indent=2,default=float)); print('\nTOP HOST INFLUENCE\n',Habs.head(12).to_string(index=False)); print('\nTOP SN INFLUENCE\n',Sabs.head(15).to_string(index=False)); print('\nANCHORS\n',A.to_string(index=False))
