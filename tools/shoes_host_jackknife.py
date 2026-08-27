@@ -31,6 +31,8 @@ def drop_host(y,L,C,sources,params,host):
 
 def anchor_constraint_rows(sources,anchor):
     sources=np.asarray(sources,str)
+    if anchor=='MW':
+        return np.where(np.isin(sources,['MHW1_HST','MHW1_Gaia']))[0]
     return np.where(sources=='mu_'+anchor)[0]
 
 
@@ -129,7 +131,7 @@ def main():
     S.to_csv(out/'leave_one_calibrator_sn_out.csv',index=False)
 
     anchor_rows=[]
-    for anchor in ['N4258','LMC']:
+    for anchor in ['N4258','LMC','MW']:
         D=anchor_constraint_rows(sources,anchor)
         q,cov,p=fit_delete_cached(y,L,params,cache,D,())
         h,s,_=get_h0(q,cov,p)
@@ -159,7 +161,7 @@ def main():
       'anchor_constraint_jackknife':A.to_dict(orient='records'),
       'M31_nonSN_host_control':{'n_rows_dropped':int(len(D)),'H0':hm,'sigma_H0':sm,'delta_H0':hm-h0},
       'peer_local_residual_to_73':required_from_peer_local,
-      'interpretation_rules':['Large individual leave-one-out shifts identify influential data, not automatically bad data.','Host and SN jackknives are correlated; their shifts must not be summed.','Anchor-constraint deletion removes only the geometric prior row and retains the Cepheid data.','The analysis targets concentration of the SH0ES ladder; it does not refit PEER.']
+      'interpretation_rules':['Large individual leave-one-out shifts identify influential data, not automatically bad data.','Host and SN jackknives are correlated; their shifts must not be summed.','Anchor-constraint deletion removes only the geometric prior rows and retains the Cepheid data.','The analysis targets concentration of the SH0ES ladder; it does not refit PEER.']
     }
     (out/'summary.json').write_text(json.dumps(summary,indent=2,default=float))
     print(json.dumps(summary,indent=2,default=float)); print('\nTOP HOST INFLUENCE\n',Habs.head(12).to_string(index=False)); print('\nTOP SN INFLUENCE\n',Sabs.head(15).to_string(index=False)); print('\nANCHORS\n',A.to_string(index=False))
