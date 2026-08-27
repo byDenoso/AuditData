@@ -1,0 +1,73 @@
+name: UAC0P eROSITA native extraction
+on:
+  push:
+    branches: [uac0p-erosita-native-20260827]
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install analysis dependencies
+        run: pip install --disable-pip-version-check astropy pandas numpy scipy
+      - name: Download official eRASS1 cosmology catalog
+        run: |
+          set -euo pipefail
+          URL='https://erosita.mpe.mpg.de/dr1/AllSkySurveyData_dr1/Catalogues_dr1/BulbulE_DR1/erass1cl_cosmology_v1.1.fits.tgz'
+          curl -fL --retry 5 --retry-delay 2 "$URL" -o erass1cl_cosmology_v1.1.fits.tgz
+          sha256sum erass1cl_cosmology_v1.1.fits.tgz > SHA256SUMS.txt
+          tar -xzf erass1cl_cosmology_v1.1.fits.tgz
+          find . -maxdepth 2 -type f -printf '%p %s bytes\n'
+      - name: Extract catalog science summary
+        run: |
+          cat > analyze.py <<'PY'
+          import json, glob, hashlib
+          import numpy as np, pandas as pd
+          from astropy.io import fits
+          paths=glob.glob('**/*.fits',recursive=True)
+          if not paths: raise SystemExit('no fits')
+          p=paths[0]
+          with fits.open(p,memmap=False) as h:
+              data=h[1].data
+              names=list(data.names)
+              def col(*opts):
+                  for o in opts:
+                      if o in names: return np.asarray(data[o])
+                  return None
+              z=col('Z_LAMBDA','zlambda','BEST_Z')
+              cr=col('CR500','CR500_NH0')
+              l500=col('L500')
+              kt=col('KT')
+              mg=col('MGAS500','Mgas500')
+              yx=col('YX500')
+              summary={'fits_file':p,'rows':int(len(data)),'columns':names}
+              def finite_stats(x):
+                  if x is None: return None
+                  x=np.asarray(x,dtype=float); x=x[np.isfinite(x) & (x>=0)]
+                  if not len(x): return None
+                  return {'n':int(len(x)),'min':float(np.min(x)),'q16':float(np.quantile(x,.16)),'median':float(np.median(x)),'q84':float(np.quantile(x,.84)),'max':float(np.max(x))}
+              summary.update({'z':finite_stats(z),'CR500':finite_stats(cr),'L500':finite_stats(l500),'KT':finite_stats(kt),'MGAS500':finite_stats(mg),'YX500':finite_stats(yx)})
+              if z is not None:
+                  z=np.asarray(z,dtype=float); mask=np.isfinite(z)
+                  zbins=np.array([0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8])
+                  counts,edges=np.histogram(z[mask],bins=zbins)
+                  summary['z_hist']=[{'zlo':float(edges[i]),'zhi':float(edges[i+1]),'count':int(counts[i])} for i in range(len(counts))]
+              # export compact rows needed for downstream tests
+              out=pd.DataFrame({'z':z if z is not None else np.nan,'CR500':cr if cr is not None else np.nan,'L500':l500 if l500 is not None else np.nan,'KT':kt if kt is not None else np.nan,'MGAS500':mg if mg is not None else np.nan,'YX500':yx if yx is not None else np.nan})
+              out.to_csv('erass1_cosmology_compact.csv',index=False)
+          with open('catalog_summary.json','w') as f: json.dump(summary,f,indent=2)
+          print(json.dumps(summary,indent=2))
+          PY
+          python analyze.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: erass1-cosmology-compact
+          path: |
+            erass1_cosmology_compact.csv
+            catalog_summary.json
+            SHA256SUMS.txt
+          retention-days: 1
