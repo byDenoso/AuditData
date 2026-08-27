@@ -25,7 +25,8 @@ def fit_delete_cached(y,L,params,cache,drop_rows,drop_params=()):
 
 def canonical_cid(name):
     s=str(name).strip()
-    s=re.sub(r'_(18|50|150)$','',s,flags=re.I)
+    # SH0ES matrix labels append the survey/photometry ID, e.g. 2000dn_57 or 2008ar_65.
+    s=re.sub(r'_\d+$','',s,flags=re.I)
     return re.sub(r'[^a-z0-9]','',s.lower())
 
 
@@ -90,7 +91,6 @@ def _load_pantheon():
 def _hf_crossmatch(sources,L,params,pantheon):
     j=params.index('5logH0')
     hf=np.where(np.abs(L[:,j])>1e-12)[0]
-    # Pantheon rows actually used by SH0ES Hubble-flow fit; duplicated light-curve reductions share z.
     pp=pantheon[pantheon['USED_IN_SH0ES_HF']==1].copy()
     lookup={}
     for c,g in pp.groupby('canon'):
@@ -136,7 +136,6 @@ def _mock_max_influence(W,C,observed_shifts,nmocks,seed=20260827):
         m=min(chunk,nmocks-done)
         z=rng.normal(size=(m,W.shape[0]))
         t=z@R.T
-        # Convert small fluctuations in 5logH0 around an arbitrary fiducial H0.
         h=73.0*10.0**(t/5.0)
         d=h[:,1:]-h[:,[0]]
         ge+=int(np.sum(np.max(np.abs(d),axis=1)>=obsmax))
@@ -152,13 +151,14 @@ def run_superposition_battery(y,L,C,params,sources,cache,hosts,sn_table,out,nmoc
     hf_all,hf=_hf_crossmatch(sources,L,params,p)
     coverage=len(hf)/max(len(hf_all),1)
     if coverage<0.80:
-        raise RuntimeError(f'Pantheon crossmatch coverage too low: {len(hf)}/{len(hf_all)}={coverage:.3f}')
+        matched=set(hf['row'].tolist()) if len(hf) else set()
+        unmatched=[str(sources[i]) for i in hf_all if int(i) not in matched][:30]
+        raise RuntimeError(f'Pantheon crossmatch coverage too low: {len(hf)}/{len(hf_all)}={coverage:.3f}; examples={unmatched}')
 
     cov0=linalg.inv(cache['A'],check_finite=False); q0=cov0@cache['g']
     h0,s0=_h0_from_fit(q0,cov0,params)
     gap=h0-H_PEER_LOCAL
 
-    # 1. zmin stability directly inside the SH0ES matrix.
     zrows=[]
     for cut in [0.023,0.03,0.04,0.05,0.06,0.075,0.10]:
         D=hf.loc[hf.zHD<cut,'row'].to_numpy(int)
@@ -167,7 +167,6 @@ def run_superposition_battery(y,L,C,params,sources,cache,hosts,sn_table,out,nmoc
         zrows.append({'zmin':cut,'n_hf_rows_dropped':len(D),'H0':h,'sigma_H0':s,'delta_H0':h-h0})
     Z=pd.DataFrame(zrows); Z.to_csv(out/'zmin_ladder.csv',index=False)
 
-    # 2. Redshift/PV prescription swap. Covariance intentionally held fixed: sensitivity, not a replacement likelihood.
     fr=[]
     for newcol in ['zCMB','zHEL']:
         yy=np.array(y,float,copy=True); shifts=[]
@@ -179,7 +178,6 @@ def run_superposition_battery(y,L,C,params,sources,cache,hosts,sn_table,out,nmoc
                    'H0':h,'sigma_H0':s,'delta_H0':h-h0})
     F=pd.DataFrame(fr); F.to_csv(out/'redshift_frame_swap.csv',index=False)
 
-    # 3. Targeted removal of the calibrator SNe that most strongly lower H0, plus random-subset null.
     keys=_physical_keys(sources,hosts)
     sorted_down=sn_table.sort_values('delta_H0').calibrator_SN.tolist()
     rng=np.random.default_rng(20260827)
@@ -202,7 +200,6 @@ def run_superposition_battery(y,L,C,params,sources,cache,hosts,sn_table,out,nmoc
                        'random_delta_p05':float(np.quantile(draws,.05)),'random_delta_median':float(np.median(draws))})
     T=pd.DataFrame(target); T.to_csv(out/'targeted_calibrator_removals.csv',index=False)
 
-    # 4. Exact geometric-anchor subset deletions.
     ar=[]; anchors=['N4258','LMC','MW']
     for k in [1,2,3]:
         for comb in itertools.combinations(anchors,k):
@@ -215,7 +212,6 @@ def run_superposition_battery(y,L,C,params,sources,cache,hosts,sn_table,out,nmoc
             ar.append({'anchors_removed':'+'.join(comb),'n_rows':len(D),'H0':h,'sigma_H0':s,'delta_H0':h-h0 if np.isfinite(h) else np.nan,'status':status})
     A=pd.DataFrame(ar); A.to_csv(out/'anchor_subset_tests.csv',index=False)
 
-    # 5. Parametric Gaussian mock look-elsewhere for the largest single-SN and single-host jackknife leverage.
     basew=deleted_estimator_weight(L,params,cache,[],(),target='5logH0')
     sn_ws=[basew]; sn_obs=[]
     for key in uniq:
