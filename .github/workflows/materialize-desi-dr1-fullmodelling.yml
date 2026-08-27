@@ -7,59 +7,37 @@ on:
       - '.github/workflows/materialize-desi-dr1-fullmodelling.yml'
 
 jobs:
-  fetch-desi:
+  fetch-one:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: BGS
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5
+          - tag: LRG1
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5
+          - tag: LRG2
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5
+          - tag: LRG3
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5
+          - tag: ELG2
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5
+          - tag: QSO
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5
     steps:
-      - name: Download official likelihood HDF5 files
+      - name: Download ${{ matrix.tag }} likelihood
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p desi_dr1_fullmodelling
           base='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/v1.0/data/likelihood'
-          files=(
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5'
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5'
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5'
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5'
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5'
-            'likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5'
-          )
-          for f in "${files[@]}"; do
-            echo "Fetching $f"
-            curl --fail --location --retry 4 --retry-delay 2 --connect-timeout 30 --max-time 180 "$base/$f" -o "desi_dr1_fullmodelling/$f"
-          done
-          (cd desi_dr1_fullmodelling && sha256sum *.h5 > SHA256SUMS.txt && ls -lah > FILES.txt)
-
-      - name: Install HDF5 reader
-        run: python -m pip install --quiet h5py
-
-      - name: Validate HDF5 payloads
-        shell: bash
-        run: |
-          python - <<'PY'
-          import glob, json, h5py, os
-          out=[]
-          for p in sorted(glob.glob('desi_dr1_fullmodelling/*.h5')):
-              with h5py.File(p,'r') as f:
-                  def walk(g,prefix=''):
-                      rows=[]
-                      for k,v in g.items():
-                          name=f'{prefix}/{k}'
-                          if isinstance(v,h5py.Dataset):
-                              rows.append({'path':name,'shape':list(v.shape),'dtype':str(v.dtype)})
-                          else:
-                              rows.extend(walk(v,name))
-                      return rows
-                  out.append({'file':os.path.basename(p),'bytes':os.path.getsize(p),'attrs':{str(k):str(v) for k,v in f.attrs.items()},'datasets':walk(f)})
-          if len(out) != 6: raise SystemExit(f'expected 6 HDF5 files, found {len(out)}')
-          with open('desi_dr1_fullmodelling/HDF5_INVENTORY.json','w') as fh: json.dump(out,fh,indent=2)
-          print(json.dumps([{'file':x['file'],'bytes':x['bytes'],'n_datasets':len(x['datasets'])} for x in out],indent=2))
-          PY
-
-      - name: Upload materialized payloads
+          mkdir -p payload
+          curl --fail --location --retry 12 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 120 "$base/${{ matrix.file }}" -o "payload/${{ matrix.file }}"
+          (cd payload && sha256sum '${{ matrix.file }}' > SHA256SUMS.txt && stat -c '%n %s bytes' '${{ matrix.file }}')
+      - name: Upload ${{ matrix.tag }} payload
         uses: actions/upload-artifact@v4
         with:
-          name: desi-dr1-fullmodelling-hdf5
-          path: desi_dr1_fullmodelling/
+          name: desi-dr1-fullmodelling-${{ matrix.tag }}
+          path: payload/
           if-no-files-found: error
           retention-days: 3
