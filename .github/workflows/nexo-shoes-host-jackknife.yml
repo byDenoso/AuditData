@@ -22,7 +22,7 @@ jobs:
           curl -fL --retry 5 "$base/C_R22.txt" -o input/C_R22.txt
           curl -fL --retry 5 "$base/q_R22.txt" -o input/q_R22.txt
           wc -l input/y_R22.txt input/L_R22.txt input/C_R22.txt input/q_R22.txt
-      - name: Run host / calibrator / anchor null battery
+      - name: Run host / calibrator / anchor / mock null battery
         run: |
           PYTHONPATH=. python tools/shoes_host_jackknife.py \
             --y input/y_R22.txt --L input/L_R22.txt --C input/C_R22.txt --q input/q_R22.txt \
@@ -36,8 +36,16 @@ jobs:
           head -20 shoes_jackknife/leave_one_calibrator_sn_out.csv
           echo '--- ANCHORS ---'
           cat shoes_jackknife/leave_one_anchor_constraint_out.csv
+          echo '--- MOCK INFLUENCE NULLS ---'
+          cat shoes_jackknife/mock_influence_nulls.csv
+          echo '--- TARGETED CALIBRATOR REMOVALS ---'
+          cat shoes_jackknife/targeted_calibrator_removals.csv
+          echo '--- REDSHIFT FRAME SWAP ---'
+          cat shoes_jackknife/redshift_frame_swap.csv
+          echo '--- ZMIN LADDER ---'
+          cat shoes_jackknife/zmin_ladder.csv
       - uses: actions/upload-artifact@v4
         with:
           name: nexo-shoes-host-jackknife
           path: shoes_jackknife/
-          retention-days: 2
+          retention-days: 3
