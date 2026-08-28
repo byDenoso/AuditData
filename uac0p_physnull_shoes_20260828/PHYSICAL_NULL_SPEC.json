@@ -1,0 +1,51 @@
+{
+  "schema": "nexo-uac0p-physical-null-spec/v1",
+  "test_id": "T-UAC0P-PHYSNULL-PR4-SHOES-DESI-CC-20260828",
+  "status": "READY_FOR_EXACT_NONLINEAR_BOOTSTRAP",
+  "null": "LCDM",
+  "alternative": {
+    "model": "UAC-0P",
+    "n": 3.0,
+    "f_X": 0.080503,
+    "log10_zc": 3.81,
+    "theta_i": 2.89155,
+    "free_UAC_parameters": 0
+  },
+  "stack": {
+    "CMB": "Planck PR4/NPIPE CamSpec TTTEEE full native ranges plus registered tau/low-ell contract",
+    "DESI": "DESI DR2 ALL_GCcomb 13-vector full covariance",
+    "SN_H0": "Pantheon+SH0ES compiled covariance-aware likelihood with calibrators and common MB profiled",
+    "CC": "canonical CCHzDiag exact-evaluation-trained likelihood; enforce H0<=70.867186",
+    "eROSITA": "EXCLUDED from primary null until UAC-aware selection+mass-calibration likelihood exists"
+  },
+  "statistic": "T = Qhat_LCDM - Qhat_UAC0P_fixed; reprofile all common cosmological and nuisance parameters under both hypotheses for observed data and every null realization",
+  "null_generation": {
+    "generate_under": "freshly minimized LCDM null on identical stack",
+    "same_statistic_observed_and_mocks": true,
+    "common_parameter_reprofile_each_mock": true,
+    "CMB_lowell_requirement": "validated generative lowT/lowE or an emulator whose injected-profile coverage is demonstrated against exact nonlinear likelihood",
+    "CC_domain_hard_gate": "reject/profile-constrain any realization requiring H0>70.867186; do not extrapolate CC surface"
+  },
+  "calibration": {
+    "pilot_draws": 1000,
+    "stage1_draws": 100000,
+    "tail_draws": 20000000,
+    "p_estimator": "add-one: (k+1)/(N+1)",
+    "promotion_threshold": "global Z>=5 only after validated coverage and declared family correction"
+  },
+  "validation_gates": [
+    "exact observed UAC0P f=0.080503 endpoint on identical likelihood",
+    "surrogate/emulator must reproduce exact observed and injected finite-amplitude profiles before tail use",
+    "no tangent efficient-score substitution if finite-amplitude validation fails",
+    "mock fit convergence and nuisance interiority audited symmetrically",
+    "seed, hashes, versions, input identities and null fit persisted",
+    "readback and deterministic replay on a frozen subset"
+  ],
+  "known_rejected_shortcuts": [
+    "sqrt(abs(DeltaQ)) as discovery Z",
+    "local quadratic null inferred from PR4 profile points",
+    "affine finite-amplitude profiler previously rejected by exact nonlinear validation",
+    "transporting CC penalty outside H0<=70.867186",
+    "adding eROSITA Gaussian S8 summary as an independent UAC likelihood"
+  ]
+}
