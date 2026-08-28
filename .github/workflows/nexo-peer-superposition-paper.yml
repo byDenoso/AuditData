@@ -12,4 +12,32 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip numpy scipy pandas pytest
       - name: Contract tests
-        run: PYTHONPATH=. pytest -q tests/test_peer_superposition_battery.py
+        run: |
+          PYTHONPATH=. pytest -q tests/test_peer_superposition_battery.py tests/test_shoes_host_jackknife.py
+      - name: Download SH0ES 2022 matrix data
+        run: |
+          mkdir -p input peer_superposition_paper
+          base='https://raw.githubusercontent.com/marcushogas/Cepheid-Distance-Ladder-Data/main/SH0ES2022'
+          curl -fL --retry 5 "$base/y_R22.txt" -o input/y_R22.txt
+          curl -fL --retry 5 "$base/L_R22.txt" -o input/L_R22.txt
+          curl -fL --retry 5 "$base/C_R22.txt" -o input/C_R22.txt
+          curl -fL --retry 5 "$base/q_R22.txt" -o input/q_R22.txt
+      - name: Run paper battery
+        run: |
+          PYTHONPATH=. python tools/peer_superposition_battery.py \
+            --y input/y_R22.txt --L input/L_R22.txt --C input/C_R22.txt --q input/q_R22.txt \
+            --out peer_superposition_paper --random-draws 1000 | tee peer_superposition_paper/run.log
+      - name: Audit readback
+        run: |
+          cat peer_superposition_paper/summary.json
+          echo '--- PAPER GATE ---'
+          cat peer_superposition_paper/paper_gate.csv
+          echo '--- GREEDY ---'
+          cat peer_superposition_paper/greedy_sn_removal.csv
+          echo '--- RANDOM NULLS ---'
+          cat peer_superposition_paper/random_subset_nulls.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexo-peer-superposition-paper
+          path: peer_superposition_paper/
+          retention-days: 7
