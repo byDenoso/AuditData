@@ -11,13 +11,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Setup harness Python 3.12
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12.13'
+          python-version: '3.12'
+      - name: Explain CI boundary
+        shell: pwsh
+        run: |
+          Write-Host "This workflow validates the portable harness only."
+          Write-Host "Scientific native-Windows acceptance remains pinned to CPython 3.12.13 in bootstrap.ps1 and doctor.py."
       - run: python -m pip install pytest==9.0.3
       - run: python -m pytest -q
       - run: python scripts/verify_artifact.py
-      - name: Doctor (diagnostic in harness CI)
+      - name: Doctor (diagnostic in harness CI; non-strict)
         run: python scripts/doctor.py
-      - name: Show R1 gate state
+      - name: Show R1 gate state (non-strict)
         run: python scripts/run_validation.py
