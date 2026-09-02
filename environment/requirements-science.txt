@@ -1,0 +1,11 @@
+# CAMB is installed by bootstrap.ps1 from the frozen upstream Git commit, not by version-only wheel substitution.
+cobaya==3.6.2
+mpi4py==4.1.2
+sacc==2.1.2
+getdist==1.7.7
+Py-BOBYQA==1.5.0
+scipy==1.17.1
+astropy==7.2.0
+fgspectra==1.4.1
+mflike==1.0.2
+portalocker==3.2.0

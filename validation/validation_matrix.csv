@@ -1,0 +1,21 @@
+gate_id,required_for_paper,category,description,status,historical_basis,r1_receipt
+G01,true,bootstrap,Clean clone and bootstrap on fresh Windows user,pending_r1,,results/r1/G01.json
+G02,true,environment,CPython 3.12.13 + pinned package/source identity,pending_r1,historical environment inventory,results/r1/G02.json
+G03,true,theory,CAMB source commit imports and reports expected identity,pending_r1,CAMB 3ef0272...,results/r1/G03.json
+G04,true,data,Official likelihood/data payload identities verified,pending_r1,ACT hashes frozen; other hashes to freeze,results/r1/G04.json
+G05,true,integration,M0 ACT+Planck-lowell+DESI gate reproduces logL/chi2,historical_pass_needs_r1_replay,Windows M0 2026-07-29,results/r1/G05.json
+G06,true,theory,Frozen exact-point r_drag sigma8 theta* replay,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G06.json
+G07,true,parity,Official ACT direct-vs-optimized objective parity,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G07.json
+G08,true,optimization,r_drag continuation preserves root and 14-to-1 call reduction,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G08.json
+G09,true,parity,64-point Latin-hypercube likelihood identity,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G09.json
+G10,true,inference,8 bounded minimizer contexts preserve objective/minimum,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G10.json
+G11,true,inference,7-point Omega_m profile preserves delta-chi2 curve,historical_pass_needs_r1_replay,submitted manuscript,results/r1/G11.json
+G12,true,performance,Nuisance-heavy batches 1/4/12 rerun with parity,pending_r1,historical workload results,results/r1/G12.json
+G13,true,performance,All-unique cosmology batches remain near-neutral with parity,pending_r1,historical workload results,results/r1/G13.json
+G14,true,performance,Four AB/BA balanced Cobaya pairs seed 17 rerun on Windows,pending_r1,LH-Data PR83 historical Linux/open-Windows gate,results/r1/G14.json
+G15,true,regression,Source and clean-composite test suite rerun from public artifact,pending_r1,historical 87/87,results/r1/G15.json
+G16,true,relocation,Relocate to a different Windows path/user and replay required gates,pending_r1,,results/r1/G16.json
+G17,true,cache,Cold-cache and warm-cache identity/failure-mode battery,pending_r1,,results/r1/G17.json
+G18,true,repetition,Repeated clean runs preserve required numerical decisions,pending_r1,,results/r1/G18.json
+G19,true,paper,Tables/figures regenerated only from verified R1 receipts,pending_r1,,results/r1/G19.json
+G20,false,cross_platform,Windows-Linux matched equivalence extension,pending_r1,supplementary proposed extension,results/r1/G20.json

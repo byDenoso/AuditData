@@ -1,0 +1,14 @@
+{
+  "m0_loglike":{"value":-395.4831594065799,"status":"historical_pass_needs_r1_replay","provenance":"PEER_CLOSURE_EXECUTION_20260729_v2.md; native Windows M0 gate"},
+  "m0_chi2":{"value":790.966,"status":"historical_pass_needs_r1_replay","provenance":"PEER_CLOSURE_EXECUTION_20260729_v2.md; native Windows M0 gate"},
+  "historical_objective_abs_delta":{"value":1.54e-11,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript validation table"},
+  "act_kernel_speedup":{"value":5.5659,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript; component benchmark"},
+  "act_kernel_objective_abs_delta":{"value":1.42e-13,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript; official-payload component benchmark"},
+  "rdrag_background_calls_baseline":{"value":14,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript"},
+  "rdrag_background_calls_optimized":{"value":1,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript"},
+  "likelihood_grid_points":{"value":64,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript Appendix A"},
+  "likelihood_grid_max_abs_delta_loglike":{"value":0.0,"status":"historical_pass_needs_r1_replay","provenance":"submitted manuscript validation table"},
+  "balanced_cobaya_speedup":{"value":1.8111,"status":"historical_pass_needs_r1_replay","provenance":"LH-Data PR83; historical late-time plumbing benchmark; must be rerun on R1 Windows host"},
+  "balanced_cobaya_shape_calls_baseline":{"value":14,"status":"historical_pass_needs_r1_replay","provenance":"LH-Data PR83"},
+  "balanced_cobaya_shape_calls_optimized":{"value":2,"status":"historical_pass_needs_r1_replay","provenance":"LH-Data PR83"}
+}

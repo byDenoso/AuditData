@@ -1,0 +1,15 @@
+# Normalized from the 2026-07-28 Windows pip freeze.
+# Workstation-local editable/file:// paths were deliberately removed.
+Python==3.12.13
+CAMB-source-commit==3ef0272d6f7ba1231128872e56e6d4c12af8267b
+cobaya==3.6.2
+mpi4py==4.1.2
+candl-like==2.2.0
+clipy-like==0.15
+sacc==2.1.2
+getdist==1.7.7
+numpy==2.4.4
+scipy==1.17.1
+matplotlib==3.10.9
+Py-BOBYQA==1.5.0
+pywin32==311

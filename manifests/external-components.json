@@ -1,0 +1,10 @@
+{
+  "schema": "ascom-00323-external-components/v1",
+  "components": [
+    {"id":"act-official-fits","required_for":["G04","G05","G07"],"expected_sha256":"c887dc9178d81f5e5e0ce76eca0cd3c9f089056630ab78a1cc4bb28ff8751c29","redistribution":"not_vendored; obtain from the official ACT release used by the manuscript"},
+    {"id":"act-deterministic-payload","required_for":["G07"],"expected_sha256":"d3ca3ff9427ecb22141df32fb6b4398d3f9a3dcb1a10d22344b33c56a12b6484","redistribution":"generated deterministically from the official FITS input"},
+    {"id":"planck-likelihood-data","required_for":["G05"],"expected_sha256":null,"redistribution":"use the released Planck likelihood/data package; freeze hashes in the R1 receipt"},
+    {"id":"desi-dr2-bao","required_for":["G05","G09","G12","G13","G14"],"expected_sha256":null,"redistribution":"use released DESI inputs; freeze hashes in the R1 receipt"},
+    {"id":"pantheon-plus-full-stat-sys","required_for":["G09","G12","G13","G14"],"expected_sha256":null,"redistribution":"use released Pantheon+ full STAT+SYS inputs; no diagonal fallback"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "ascom-00323-content-identities/v1",
+  "official_act_fits": "c887dc9178d81f5e5e0ce76eca0cd3c9f089056630ab78a1cc4bb28ff8751c29",
+  "deterministic_act_payload": "d3ca3ff9427ecb22141df32fb6b4398d3f9a3dcb1a10d22344b33c56a12b6484",
+  "camb_wheel_historical": "4e38c3771329b2d4f5c185f8d8d7a0f183178d5b07957f18f9008f90e7d4b79d",
+  "cosmorec_source_tree": "a9bdd1b603f5d7f8c5a10dcede3e488c733c3b3b7790fa555b08c2f9eb3ac060",
+  "v2_base": "e521ca90f6182258e8fa01e127907044c8b94b7e0d7124a81bf4c62be3402e41",
+  "v3_overlay": "139e747b4f46ae8f74c21d239ea9575b2b3423dabdb795d01757a75c70c3ee6c",
+  "v4_overlay": "0bc99996c5836fd9a03701d7176407771352eced1bc4763cfa5bdbbd40198ca4",
+  "v6_paper_overlay": "45c92f587f07329e3f63153c0fdd27ba9d6b272a27d675256a452423ba10fb46"
+}
