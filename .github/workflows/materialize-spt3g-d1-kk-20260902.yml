@@ -1,0 +1,50 @@
+name: Materialize SPT3G D1 KK 20260902
+
+on:
+  push:
+    paths:
+      - '.github/workflows/materialize-spt3g-d1-kk-20260902.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout official pinned SPT likelihood payload
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/SouthPoleTelescope/spt_candl_data.git spt_candl_data
+          cd spt_candl_data
+          git checkout efe35b7bfd815a115d5123e210a6849a4175bc81
+          test "$(git rev-parse HEAD)" = "efe35b7bfd815a115d5123e210a6849a4175bc81"
+      - name: Package exact D1 KK payload
+        run: |
+          set -euxo pipefail
+          ROOT=spt_candl_data/spt_candl_data/SPT3G_D1_KK_v0
+          test -f "$ROOT/GMV/SPT3G_D1_KK_GMV_withcmb.yaml"
+          test -f "$ROOT/GMV/SPT3G_D1_KK_GMV_cov_noCMBmarg.txt"
+          test -f "$ROOT/GMV/windows/kk_window_functions.txt"
+          test -f "$ROOT/GMV/emulator/emul_deb_qmv_v4.npz"
+          test -f "$ROOT/GMV/beam/B_ell_main_beam.npz"
+          test -f "$ROOT/GMV/ilcweights/ilcweights1d_TT.npy"
+          test -f "$ROOT/GMV/ilcweights/ilcweights1d_EE.npy"
+          printf 'upstream_repo=SouthPoleTelescope/spt_candl_data\nupstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81\nvariant=SPT3G_D1_KK_v0/GMV/SPT3G_D1_KK_GMV_withcmb.yaml\n' > PROVENANCE.txt
+          find "$ROOT" -type f -print0 | sort -z | xargs -0 sha256sum > SPT3G_D1_KK_v0_SHA256SUMS.txt
+          tar -C spt_candl_data/spt_candl_data -czf SPT3G_D1_KK_v0_official_efe35b7.tar.gz SPT3G_D1_KK_v0
+          sha256sum SPT3G_D1_KK_v0_official_efe35b7.tar.gz > SPT3G_D1_KK_v0_official_efe35b7.tar.gz.sha256
+          du -sh SPT3G_D1_KK_v0_official_efe35b7.tar.gz
+      - name: Upload official payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: spt3g-d1-kk-v0-official-efe35b7
+          path: |
+            SPT3G_D1_KK_v0_official_efe35b7.tar.gz
+            SPT3G_D1_KK_v0_official_efe35b7.tar.gz.sha256
+            SPT3G_D1_KK_v0_SHA256SUMS.txt
+            PROVENANCE.txt
+          compression-level: 0
+          retention-days: 3
