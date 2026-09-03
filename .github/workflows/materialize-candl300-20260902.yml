@@ -1,6 +1,9 @@
 name: Materialize candl 3.0.0 20260902
 
 on:
+  push:
+    paths:
+      - '.github/workflows/materialize-candl300-20260902.yml'
   pull_request:
     paths:
       - '.github/candl300-materialize-trigger-20260902.txt'
