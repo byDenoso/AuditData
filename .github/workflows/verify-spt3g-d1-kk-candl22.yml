@@ -1,0 +1,56 @@
+name: Verify SPT3G D1 kk with candl 2.2
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Install candl 2.2 and pinned SPT data
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'candl-like==2.2.0'
+          python -m pip install 'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
+      - name: Initialize native joint SPT D1 kk likelihood
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import candl, spt_candl_data
+          print('candl_version=', candl.__version__)
+          print('spt_candl_data_version=', spt_candl_data.__version__)
+          like = candl.Like(spt_candl_data.SPT3G_D1_kk, variant='GMV_withcmb')
+          print('name=', like.name)
+          print('N_bins=', getattr(like, 'N_bins_total', None))
+          print('required_nuisance=', sorted(getattr(like, 'required_nuisance_parameters', [])))
+          print('required_spectra=', getattr(like, 'required_spectra', None))
+          print('SPT3G_D1_KK_GMV_WITHCMB_INIT_OK')
+          PY
+      - name: Freeze compatible runtime
+        run: |
+          set -euxo pipefail
+          mkdir runtime-freeze
+          python -m pip freeze | sort > runtime-freeze/pip-freeze.txt
+          python - <<'PY' > runtime-freeze/versions.txt
+          import candl, spt_candl_data, jax, gpjax, sklearn
+          print('candl', candl.__version__)
+          print('spt_candl_data', spt_candl_data.__version__)
+          print('jax', jax.__version__)
+          print('gpjax', getattr(gpjax, '__version__', 'unknown'))
+          print('sklearn', sklearn.__version__)
+          PY
+          sha256sum runtime-freeze/* > runtime-freeze/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spt3g-d1-kk-candl22-compatible-runtime
+          path: runtime-freeze
+          retention-days: 3
