@@ -25,13 +25,17 @@ jobs:
           mkdir -p wheels battery
           python -m pip wheel --wheel-dir wheels \
             'candl-like==2.2.0' \
+            'jax==0.7.2' \
+            'jaxlib==0.7.2' \
+            'gpjax==0.13.4' \
             'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
           sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
       - name: Offline smoke from wheelhouse
         run: |
           set -euxo pipefail
           python -m venv smoke
-          smoke/bin/pip install --no-index --find-links wheels 'candl-like==2.2.0' 'spt_candl_data==3.0.0'
+          smoke/bin/pip install --no-index --find-links wheels \
+            'candl-like==2.2.0' 'jax==0.7.2' 'jaxlib==0.7.2' 'gpjax==0.13.4' 'spt_candl_data==3.0.0'
           smoke/bin/python - <<'PY' | tee battery/OFFLINE_SMOKE.txt
           import candl, spt_candl_data, jax, gpjax, sklearn
           like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
@@ -72,7 +76,6 @@ jobs:
           assert 'noCMBmarg' in txt, joint_path
           assert 'Mll' in txt, joint_path
           assert 'TT' in txt and 'TE' in txt and 'EE' in txt and 'kk' in txt, joint_path
-          assert 'CMBmarg' in txt
           print('joint_yaml', joint_path)
           print('SPT3G_D1_KK_NATIVE_JOINT_CONTRACT_PASS')
           PY
@@ -83,6 +86,9 @@ jobs:
             echo 'test_id=T-PEER-PNGB-NATIVE-JOINT-SPTNEW-20260902'
             echo 'python=3.12.13'
             echo 'candl=2.2.0'
+            echo 'jax=0.7.2'
+            echo 'jaxlib=0.7.2'
+            echo 'gpjax=0.13.4'
             echo 'spt_candl_data=3.0.0'
             echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
             echo 'contract=GMV_withcmb/noCMBmarg'
