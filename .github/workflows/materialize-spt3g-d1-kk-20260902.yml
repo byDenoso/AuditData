@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - '.github/workflows/materialize-spt3g-d1-kk-20260902.yml'
+  pull_request:
+    paths:
+      - '.github/spt3g-d1-materialize-trigger-20260902.txt'
   workflow_dispatch:
 
 permissions:
