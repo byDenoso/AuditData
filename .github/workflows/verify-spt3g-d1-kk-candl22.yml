@@ -29,7 +29,7 @@ jobs:
           print('candl_version=', candl.__version__)
           print('spt_candl_data_version=', spt_candl_data.__version__)
           print('shortcut=', spt_candl_data.SPT3G_D1_KK)
-          like = candl.Like(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
+          like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
           print('name=', like.name)
           print('N_bins=', getattr(like, 'N_bins_total', None))
           print('required_nuisance=', sorted(getattr(like, 'required_nuisance_parameters', [])))
