@@ -1,0 +1,60 @@
+name: Materialize SPT3G native joint wheelhouse 20260902
+
+on:
+  pull_request:
+    paths:
+      - '.github/spt3g-native-joint-wheelhouse-trigger-20260902.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheelhouse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Build pinned wheelhouse
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip wheel
+          mkdir -p wheels
+          python -m pip wheel --wheel-dir wheels \
+            'candl-like==2.2.0' \
+            'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
+          sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
+      - name: Offline smoke from wheelhouse
+        run: |
+          set -euxo pipefail
+          python -m venv smoke
+          smoke/bin/pip install --no-index --find-links wheels 'candl-like==2.2.0' 'spt_candl_data==3.0.0'
+          smoke/bin/python - <<'PY'
+          import candl, spt_candl_data, jax, gpjax, sklearn
+          like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
+          assert like.N_bins_total == 17
+          print('candl', candl.__version__)
+          print('spt_candl_data', spt_candl_data.__version__)
+          print('jax', jax.__version__)
+          print('gpjax', getattr(gpjax, '__version__', 'unknown'))
+          print('sklearn', sklearn.__version__)
+          print('bins', like.N_bins_total)
+          print('SPT3G_NATIVE_JOINT_OFFLINE_SMOKE_OK')
+          PY
+      - name: Freeze manifest
+        run: |
+          set -euxo pipefail
+          {
+            echo 'python=3.12.13'
+            echo 'candl=2.2.0'
+            echo 'spt_candl_data=3.0.0'
+            echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
+          } > wheels/PROVENANCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spt3g-native-joint-wheelhouse-py312
+          path: wheels
+          compression-level: 0
+          retention-days: 3
