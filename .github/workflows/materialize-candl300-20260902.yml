@@ -1,4 +1,4 @@
-name: Materialize candl 3.0.0 20260902
+name: Materialize canonical candl 2.2.0
 
 on:
   push:
@@ -25,17 +25,17 @@ jobs:
           set -euxo pipefail
           python -m pip install --upgrade pip wheel
           mkdir wheels
-          python -m pip wheel --wheel-dir wheels 'candl-like==3.0.0'
+          python -m pip wheel --wheel-dir wheels 'candl-like==2.2.0'
           sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
           python -m venv smoke
-          smoke/bin/pip install --no-index --find-links wheels 'candl-like==3.0.0'
+          smoke/bin/pip install --no-index --find-links wheels 'candl-like==2.2.0'
           smoke/bin/python - <<'PY'
           import candl
           print('candl_version=', getattr(candl, '__version__', 'unknown'))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: candl300-wheelhouse-py312
+          name: candl220-wheelhouse-py312
           path: wheels
           compression-level: 0
-          retention-days: 3
+          retention-days: 7
