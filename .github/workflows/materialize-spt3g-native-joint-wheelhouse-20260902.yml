@@ -1,0 +1,125 @@
+name: Materialize SPT3G native joint wheelhouse 20260902
+
+on:
+  pull_request:
+    paths:
+      - '.github/spt3g-native-joint-wheelhouse-trigger-20260902.txt'
+      - '.github/workflows/materialize-spt3g-native-joint-wheelhouse-20260902.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheelhouse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+      - name: Build pinned wheelhouse
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip wheel
+          mkdir -p wheels battery
+          python -m pip wheel --wheel-dir wheels \
+            'candl-like==2.2.0' \
+            'jax==0.7.2' \
+            'jaxlib==0.7.2' \
+            'gpjax==0.13.4' \
+            'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
+          sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
+      - name: Freeze exact candl runtime payload
+        run: |
+          set -euxo pipefail
+          mkdir -p candl_runtime
+          cp wheels/candl_like-2.2.0-py3-none-any.whl candl_runtime/
+          sha256sum candl_runtime/candl_like-2.2.0-py3-none-any.whl > candl_runtime/CANDL_SHA256.txt
+          test "$(cut -d' ' -f1 candl_runtime/CANDL_SHA256.txt)" = '4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
+          {
+            echo 'python=3.12.13'
+            echo 'candl=2.2.0'
+            echo 'candl_sha256=4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
+            echo 'spt_candl_data=3.0.0'
+            echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
+            echo 'contract=SPT3G_D1_KK/GMV_withcmb/noCMBmarg'
+            echo 'purpose=ACT-ENG-SPTD1-CANDL-RUNTIME-20260904'
+          } > candl_runtime/RUNTIME_PROVENANCE.txt
+      - name: Upload exact candl runtime payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: candl-like-2.2.0-py312-exact
+          path: candl_runtime
+          compression-level: 6
+          retention-days: 7
+      - name: Offline smoke from wheelhouse
+        run: |
+          set -euxo pipefail
+          python -m venv smoke
+          smoke/bin/pip install --no-index --find-links wheels \
+            'candl-like==2.2.0' 'jax==0.7.2' 'jaxlib==0.7.2' 'gpjax==0.13.4' 'spt_candl_data==3.0.0'
+          smoke/bin/python - <<'PY' | tee battery/OFFLINE_SMOKE.txt
+          import candl, spt_candl_data, jax, gpjax, sklearn
+          like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
+          assert like.N_bins_total == 17
+          print('candl', candl.__version__)
+          print('spt_candl_data', spt_candl_data.__version__)
+          print('jax', jax.__version__)
+          print('gpjax', getattr(gpjax, '__version__', 'unknown'))
+          print('sklearn', sklearn.__version__)
+          print('bins', like.N_bins_total)
+          print('SPT3G_NATIVE_JOINT_OFFLINE_SMOKE_OK')
+          PY
+      - name: Run upstream official test suite
+        run: |
+          set -euxo pipefail
+          smoke/bin/python - <<'PY' | tee battery/UPSTREAM_RUN_ALL_TESTS.txt
+          import spt_candl_data
+          spt_candl_data.run_all_tests()
+          print('SPT_CANDL_DATA_RUN_ALL_TESTS_PASS')
+          PY
+      - name: Validate SPT D1 KK joint contract
+        run: |
+          set -euxo pipefail
+          smoke/bin/python - <<'PY' | tee battery/KK_JOINT_CONTRACT.txt
+          import pathlib
+          import candl
+          import spt_candl_data
+
+          variants = ['GMV', 'GMV_withcmb', 'GMVprof_withcmb', 'PP_withcmb']
+          for variant in variants:
+              like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant=variant)
+              assert like.N_bins_total == 17, (variant, like.N_bins_total)
+              req = getattr(like, 'required_nuisance_parameters', None)
+              print('variant', variant, 'bins', like.N_bins_total, 'required_nuisance', req)
+
+          joint_path = pathlib.Path(spt_candl_data.SPT3G_D1_KK_GMV_withcmb)
+          txt = joint_path.read_text()
+          assert 'noCMBmarg' in txt, joint_path
+          assert 'Mll' in txt, joint_path
+          assert 'TT' in txt and 'TE' in txt and 'EE' in txt and 'kk' in txt, joint_path
+          print('joint_yaml', joint_path)
+          print('SPT3G_D1_KK_NATIVE_JOINT_CONTRACT_PASS')
+          PY
+      - name: Freeze manifest
+        run: |
+          set -euxo pipefail
+          {
+            echo 'test_id=T-PEER-PNGB-NATIVE-JOINT-SPTNEW-20260902'
+            echo 'python=3.12.13'
+            echo 'candl=2.2.0'
+            echo 'jax=0.7.2'
+            echo 'jaxlib=0.7.2'
+            echo 'gpjax=0.13.4'
+            echo 'spt_candl_data=3.0.0'
+            echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
+            echo 'contract=GMV_withcmb/noCMBmarg'
+          } > battery/PROVENANCE.txt
+          sha256sum battery/* | sort > battery/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spt3g-native-validation-battery-20260903
+          path: battery
+          compression-level: 6
+          retention-days: 7
