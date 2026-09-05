@@ -1,53 +1,180 @@
-name: Materialize Planck Python 3.12
+name: DS-1 Exact DESI LSS Holdout Temporary Runner
 
 on:
-  workflow_dispatch:
   pull_request:
     paths:
       - '.github/materialize-planck-trigger.txt'
+      - '.github/workflows/materialize-planck-py312.yml'
 
 permissions:
   contents: read
 
 env:
-  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONUNBUFFERED: '1'
+  DESI_BASE: 'https://data.desi.lbl.gov/public/dr1/survey/catalogs/dr1/LSS/iron/LSScats/v1.5'
 
 jobs:
-  materialize:
+  ds1-exact-lss:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.13'
-      - name: Install scientific runtime
+          python-version: '3.12'
+      - name: Install analysis runtime
+        run: python -m pip install --quiet numpy scipy astropy
+      - name: Download exact DESI DR1 LSS clustering data and one matched random realization
         run: |
           set -euxo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install camb==1.6.6 cobaya==3.6.2 fgspectra==1.4.1 syslibrary==0.2 astropy==7.2.0 py-bobyqa==1.5.0
-      - name: Materialize public Planck likelihoods
+          mkdir -p ds1_lss
+          curl -fL --retry 5 --retry-delay 3 "$DESI_BASE/LRG_NGC_clustering.dat.fits" -o ds1_lss/LRG_NGC_clustering.dat.fits
+          curl -fL --retry 5 --retry-delay 3 "$DESI_BASE/LRG_NGC_0_clustering.ran.fits" -o ds1_lss/LRG_NGC_0_clustering.ran.fits
+          curl -fL --retry 5 --retry-delay 3 "$DESI_BASE/QSO_NGC_clustering.dat.fits" -o ds1_lss/QSO_NGC_clustering.dat.fits
+          curl -fL --retry 5 --retry-delay 3 "$DESI_BASE/QSO_NGC_0_clustering.ran.fits" -o ds1_lss/QSO_NGC_0_clustering.ran.fits
+          ls -lh ds1_lss
+          sha256sum ds1_lss/*.fits > ds1_lss/SHA256SUMS.txt
+      - name: Run frozen DS-1 mask-corrected holdout
         run: |
-          set -euxo pipefail
-          mkdir -p packages
-          cobaya-install \
-            planck_2018_highl_plik.TTTEEE_lite \
-            planck_2018_lowl.TT \
-            planck_2018_lowl.EE \
-            planck_2018_lensing.clik \
-            -p "$PWD/packages" --no-set-global
-          find packages -maxdepth 5 -type f | sort > planck-package-filelist.txt
-          sed -n '1,200p' planck-package-filelist.txt
-          du -sh packages
-          tar -C packages -czf planck-packages-py312.tar.gz .
-          sha256sum planck-packages-py312.tar.gz > planck-packages-py312.tar.gz.sha256
-      - name: Upload materialized packages
+          python - <<'PY'
+          import json, math, random
+          from pathlib import Path
+          import numpy as np
+          from astropy.io import fits
+
+          RA0, DEC0, RAD = 119.666, 32.857, 20.0
+          SEED = 20260824
+          NCAND = 200
+          COSRAD = math.cos(math.radians(RAD))
+
+          def unitvec(ra,dec):
+              ra=np.deg2rad(np.asarray(ra,float)); dec=np.deg2rad(np.asarray(dec,float))
+              return np.column_stack([np.cos(dec)*np.cos(ra), np.cos(dec)*np.sin(ra), np.sin(dec)])
+
+          def angsep(ra1,dec1,ra2,dec2):
+              a1,a2=map(math.radians,(ra1,ra2)); d1,d2=map(math.radians,(dec1,dec2))
+              c=math.sin(d1)*math.sin(d2)+math.cos(d1)*math.cos(d2)*math.cos(a1-a2)
+              return math.degrees(math.acos(max(-1,min(1,c))))
+
+          def weight_from_table(tab):
+              names={n.upper():n for n in tab.names}
+              # DESI clustering catalogs generally provide WEIGHT as the total non-FKP weight.
+              if 'WEIGHT' in names:
+                  return np.asarray(tab[names['WEIGHT']],float), ['WEIGHT']
+              parts=[]; w=np.ones(len(tab),float)
+              for k in ['WEIGHT_COMP','WEIGHT_ZFAIL','WEIGHT_SYS']:
+                  if k in names:
+                      w*=np.asarray(tab[names[k]],float); parts.append(k)
+              return w, parts or ['UNITY']
+
+          def load_shell(path,zlo,zhi,random_max=600000):
+              with fits.open(path,memmap=True) as hd:
+                  tab=hd[1].data
+                  names=[n.upper() for n in tab.names]
+                  print(path, 'rows', len(tab), 'columns', names)
+                  def col(name): return np.asarray(tab[tab.names[names.index(name)]])
+                  ra=np.asarray(col('RA'),float); dec=np.asarray(col('DEC'),float); z=np.asarray(col('Z'),float)
+                  w,ws=weight_from_table(tab)
+                  good=np.isfinite(ra)&np.isfinite(dec)&np.isfinite(z)&np.isfinite(w)&(z>=zlo)&(z<zhi)&(w>0)
+                  idx=np.flatnonzero(good)
+                  if 'clustering.ran' in path and len(idx)>random_max:
+                      rng=np.random.default_rng(SEED+int(round(zlo*10000)))
+                      idx=np.sort(rng.choice(idx,size=random_max,replace=False))
+                  return {'ra':ra[idx], 'dec':dec[idx], 'z':z[idx], 'w':w[idx], 'weight_columns':ws,
+                          'columns':names, 'n_total':len(tab), 'n_shell':len(idx)}
+
+          rng=random.Random(SEED)
+          sinlo,sinhi=math.sin(math.radians(-10)),math.sin(math.radians(75))
+          controls=[]
+          while len(controls)<NCAND:
+              ra=360*rng.random(); dec=math.degrees(math.asin(sinlo+(sinhi-sinlo)*rng.random()))
+              if angsep(ra,dec,RA0,DEC0)<2*RAD: continue
+              controls.append((len(controls),ra,dec))
+          centers=np.array([(RA0,DEC0)]+[(r,d) for _,r,d in controls],float)
+          cvec=unitvec(centers[:,0],centers[:,1])
+
+          def weighted_caps(cat, chunk=50000):
+              sums=np.zeros(len(centers),float)
+              ra,dec,w=cat['ra'],cat['dec'],cat['w']
+              for s in range(0,len(ra),chunk):
+                  e=min(len(ra),s+chunk)
+                  v=unitvec(ra[s:e],dec[s:e])
+                  inside=(v@cvec.T)>=COSRAD
+                  sums += (inside*w[s:e,None]).sum(axis=0)
+              return sums
+
+          specs={
+            'DS1a_LRG':('LRG',0.573,0.785),
+            'DS1b_QSO':('QSO',1.4436,1.688),
+          }
+          out={
+            'schema':'ds1-exact-desi-lss-holdout/v1',
+            'preregistered':{'ra_deg':RA0,'dec_deg':DEC0,'radius_deg':RAD,'low_z':[0.573,0.785],'high_z':[1.4436,1.688]},
+            'release':'DESI DR1 LSS iron LSScats v1.5',
+            'random_realization':0,
+            'control_design':{
+              'seed':SEED,'n_candidate_centers':NCAND,'candidate_dec_range_deg':[-10,75],
+              'exclude_from_ds1_deg':2*RAD,
+              'coverage_gate':'random shell cap weight >= 0.5 * DS1 random shell cap weight',
+              'statistic':'delta = (Dcap/Rcap)/(Dall/Rall)-1',
+              'p':'one-sided add-one rank among coverage-qualified pre-generated control centers',
+              'random_shell_downsample_max_rows':600000
+            },
+            'tests':{}
+          }
+
+          for label,(tr,zlo,zhi) in specs.items():
+              dpath=f'ds1_lss/{tr}_NGC_clustering.dat.fits'
+              rpath=f'ds1_lss/{tr}_NGC_0_clustering.ran.fits'
+              data=load_shell(dpath,zlo,zhi)
+              rand=load_shell(rpath,zlo,zhi)
+              D=weighted_caps(data); R=weighted_caps(rand)
+              dall=float(np.sum(data['w'])); rall=float(np.sum(rand['w']))
+              alpha=dall/rall
+              delta=np.full(len(centers),np.nan)
+              good=R>0
+              delta[good]=(D[good]/R[good])/alpha-1
+              gate=0.5*R[0]
+              valid=np.flatnonzero((R>=gate)&np.isfinite(delta))
+              valid=valid[valid!=0]
+              ctrl_delta=delta[valid]
+              exceed=int(np.sum(ctrl_delta>=delta[0]))
+              p=(exceed+1)/(len(valid)+1) if len(valid) else None
+              med=float(np.median(ctrl_delta)) if len(valid) else None
+              mad=float(np.median(np.abs(ctrl_delta-med))) if len(valid) else None
+              robust_z=float((delta[0]-med)/(1.4826*mad)) if mad and mad>0 else None
+              mean=float(np.mean(ctrl_delta)) if len(valid) else None
+              sd=float(np.std(ctrl_delta,ddof=1)) if len(valid)>1 else None
+              zctrl=float((delta[0]-mean)/sd) if sd and sd>0 else None
+              result={
+                'tracer':tr,'z':[zlo,zhi],
+                'data_rows_total':data['n_total'],'data_rows_shell':data['n_shell'],
+                'random_rows_total':rand['n_total'],'random_rows_shell_used':rand['n_shell'],
+                'data_weight_columns':data['weight_columns'],'random_weight_columns':rand['weight_columns'],
+                'Dall_shell_weight':dall,'Rall_shell_weight_used':rall,'alpha':alpha,
+                'DS1':{'Dcap':float(D[0]),'Rcap':float(R[0]),'delta':float(delta[0])},
+                'coverage_gate_Rcap':float(gate),'n_valid_controls':int(len(valid)),
+                'n_control_exceed':exceed,'p_empirical_add1':p,
+                'control_delta_median':med,'control_delta_mad':mad,'robust_z':robust_z,
+                'control_delta_mean':mean,'control_delta_sd':sd,'z_vs_controls':zctrl,
+                'valid_controls':[{'center_index':int(i-1),'ra':float(centers[i,0]),'dec':float(centers[i,1]),
+                                   'Dcap':float(D[i]),'Rcap':float(R[i]),'delta':float(delta[i])} for i in valid]
+              }
+              out['tests'][label]=result
+              print('\n',label,json.dumps({k:v for k,v in result.items() if k!='valid_controls'},indent=2))
+
+          Path('ds1_lss/DS1_EXACT_DESI_LSS_HOLDOUT.json').write_text(json.dumps(out,indent=2,sort_keys=True))
+          lines=['test,tracer,zlo,zhi,delta,p_empirical_add1,robust_z,z_vs_controls,n_valid_controls']
+          for label,r in out['tests'].items():
+              lines.append(','.join(map(str,[label,r['tracer'],r['z'][0],r['z'][1],r['DS1']['delta'],r['p_empirical_add1'],r['robust_z'],r['z_vs_controls'],r['n_valid_controls']])))
+          Path('ds1_lss/DS1_EXACT_DESI_LSS_HOLDOUT_SUMMARY.csv').write_text('\n'.join(lines)+'\n')
+          PY
+      - name: Upload exact DS-1 DESI LSS holdout
         uses: actions/upload-artifact@v4
         with:
-          name: planck-packages-py312
+          name: ds1-exact-desi-lss-holdout-20260824
           path: |
-            planck-packages-py312.tar.gz
-            planck-packages-py312.tar.gz.sha256
-            planck-package-filelist.txt
-          compression-level: 0
+            ds1_lss/DS1_EXACT_DESI_LSS_HOLDOUT.json
+            ds1_lss/DS1_EXACT_DESI_LSS_HOLDOUT_SUMMARY.csv
+            ds1_lss/SHA256SUMS.txt
           retention-days: 3

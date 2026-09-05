@@ -1,0 +1,43 @@
+name: Materialize DESI DR1 Full-Modelling
+
+on:
+  push:
+    branches: [ds1-desi-holdout-20260824]
+    paths:
+      - '.github/workflows/materialize-desi-dr1-fullmodelling.yml'
+
+jobs:
+  fetch-one:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: BGS
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_BGS_BRIGHT-21.5_GCcomb_z0.1-0.4_thetacut0.05.h5
+          - tag: LRG1
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.4-0.6_thetacut0.05.h5
+          - tag: LRG2
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.6-0.8_thetacut0.05.h5
+          - tag: LRG3
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_LRG_GCcomb_z0.8-1.1_thetacut0.05.h5
+          - tag: ELG2
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_ELG_LOPnotqso_GCcomb_z1.1-1.6_thetacut0.05.h5
+          - tag: QSO
+            file: likelihood_spectrum-poles-rotated+bao-recon_syst-rotation-hod-photo_QSO_GCcomb_z0.8-2.1_thetacut0.05.h5
+    steps:
+      - name: Download ${{ matrix.tag }} likelihood
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://data.desi.lbl.gov/public/dr1/vac/dr1/full-shape-bao-clustering/v1.0/data/likelihood'
+          mkdir -p payload
+          curl --fail --location --retry 12 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 120 "$base/${{ matrix.file }}" -o "payload/${{ matrix.file }}"
+          (cd payload && sha256sum '${{ matrix.file }}' > SHA256SUMS.txt && stat -c '%n %s bytes' '${{ matrix.file }}')
+      - name: Upload ${{ matrix.tag }} payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: desi-dr1-fullmodelling-${{ matrix.tag }}
+          path: payload/
+          if-no-files-found: error
+          retention-days: 3
