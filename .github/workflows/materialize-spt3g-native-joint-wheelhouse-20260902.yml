@@ -30,6 +30,13 @@ jobs:
             'gpjax==0.13.4' \
             'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
           sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
+      - name: Upload exact native-joint wheelhouse
+        uses: actions/upload-artifact@v4
+        with:
+          name: spt3g-native-joint-wheelhouse-py312-20260905
+          path: wheels
+          compression-level: 0
+          retention-days: 7
       - name: Freeze exact candl runtime payload
         run: |
           set -euxo pipefail
