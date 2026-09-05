@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.13'
+          python-version: '3.13.5'
       - name: Build pinned wheelhouse
         run: |
           set -euxo pipefail
@@ -33,7 +33,7 @@ jobs:
       - name: Upload exact native-joint wheelhouse
         uses: actions/upload-artifact@v4
         with:
-          name: spt3g-native-joint-wheelhouse-py312-20260905
+          name: spt3g-native-joint-wheelhouse-py313-20260905
           path: wheels
           compression-level: 0
           retention-days: 7
@@ -45,18 +45,21 @@ jobs:
           sha256sum candl_runtime/candl_like-2.2.0-py3-none-any.whl > candl_runtime/CANDL_SHA256.txt
           test "$(cut -d' ' -f1 candl_runtime/CANDL_SHA256.txt)" = '4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
           {
-            echo 'python=3.12.13'
+            echo 'python=3.13.5'
             echo 'candl=2.2.0'
             echo 'candl_sha256=4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
+            echo 'jax=0.7.2'
+            echo 'jaxlib=0.7.2'
+            echo 'gpjax=0.13.4'
             echo 'spt_candl_data=3.0.0'
             echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
             echo 'contract=SPT3G_D1_KK/GMV_withcmb/noCMBmarg'
-            echo 'purpose=ACT-ENG-SPTD1-CANDL-RUNTIME-20260904'
+            echo 'purpose=ACT-SCI-PNGB-SPTD1-NATIVE-JOINT-001 dependency hydration only'
           } > candl_runtime/RUNTIME_PROVENANCE.txt
       - name: Upload exact candl runtime payload
         uses: actions/upload-artifact@v4
         with:
-          name: candl-like-2.2.0-py312-exact
+          name: candl-like-2.2.0-py313-exact
           path: candl_runtime
           compression-level: 6
           retention-days: 7
@@ -67,14 +70,18 @@ jobs:
           smoke/bin/pip install --no-index --find-links wheels \
             'candl-like==2.2.0' 'jax==0.7.2' 'jaxlib==0.7.2' 'gpjax==0.13.4' 'spt_candl_data==3.0.0'
           smoke/bin/python - <<'PY' | tee battery/OFFLINE_SMOKE.txt
-          import candl, spt_candl_data, jax, gpjax, sklearn
+          import candl, spt_candl_data, jax, gpjax, sklearn, astropy
+          from astropy.io import fits
           like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
           assert like.N_bins_total == 17
+          print('python_runtime=3.13.5')
           print('candl', candl.__version__)
           print('spt_candl_data', spt_candl_data.__version__)
           print('jax', jax.__version__)
           print('gpjax', getattr(gpjax, '__version__', 'unknown'))
           print('sklearn', sklearn.__version__)
+          print('astropy', astropy.__version__)
+          print('astropy_fits_import=PASS')
           print('bins', like.N_bins_total)
           print('SPT3G_NATIVE_JOINT_OFFLINE_SMOKE_OK')
           PY
@@ -93,14 +100,12 @@ jobs:
           import pathlib
           import candl
           import spt_candl_data
-
           variants = ['GMV', 'GMV_withcmb', 'GMVprof_withcmb', 'PP_withcmb']
           for variant in variants:
               like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant=variant)
               assert like.N_bins_total == 17, (variant, like.N_bins_total)
               req = getattr(like, 'required_nuisance_parameters', None)
               print('variant', variant, 'bins', like.N_bins_total, 'required_nuisance', req)
-
           joint_path = pathlib.Path(spt_candl_data.SPT3G_D1_KK_GMV_withcmb)
           txt = joint_path.read_text()
           assert 'noCMBmarg' in txt, joint_path
@@ -114,7 +119,7 @@ jobs:
           set -euxo pipefail
           {
             echo 'test_id=T-PEER-PNGB-NATIVE-JOINT-SPTNEW-20260902'
-            echo 'python=3.12.13'
+            echo 'python=3.13.5'
             echo 'candl=2.2.0'
             echo 'jax=0.7.2'
             echo 'jaxlib=0.7.2'
@@ -126,7 +131,7 @@ jobs:
           sha256sum battery/* | sort > battery/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: spt3g-native-validation-battery-20260903
+          name: spt3g-native-validation-battery-py313-20260905
           path: battery
           compression-level: 6
           retention-days: 7
