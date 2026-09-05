@@ -1,0 +1,37 @@
+name: Export Python 3.12 runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-python312:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Package interpreter
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import sys, sysconfig
+          print(sys.version)
+          print(sys.prefix)
+          print(sysconfig.get_config_var('SOABI'))
+          PY
+          ROOT="$(python -c 'import sys; print(sys.prefix)')"
+          tar -C "$ROOT" -czf python312-linux-x86_64.tar.gz .
+          sha256sum python312-linux-x86_64.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python312-linux-x86_64
+          path: |
+            python312-linux-x86_64.tar.gz
+            SHA256SUMS.txt
+          retention-days: 1
+          compression-level: 0
