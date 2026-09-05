@@ -1,0 +1,36 @@
+name: Fetch PR4 NPIPE assets
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/fetch-pr4-npipe-assets.yml
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-pr4-npipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download official CamSpec NPIPE payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          curl -L --fail --retry 8 --retry-all-errors \
+            https://github.com/CobayaSampler/planck_native_data/releases/download/v1/CamSpec_NPIPE.zip \
+            -o payload/CamSpec_NPIPE.zip
+          unzip -t payload/CamSpec_NPIPE.zip
+          sha256sum payload/CamSpec_NPIPE.zip | tee payload/SHA256SUMS.txt
+          stat -c '%n %s bytes' payload/CamSpec_NPIPE.zip | tee payload/SIZE.txt
+
+      - name: Upload verified payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr4-npipe-camspec-payload
+          path: payload/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
