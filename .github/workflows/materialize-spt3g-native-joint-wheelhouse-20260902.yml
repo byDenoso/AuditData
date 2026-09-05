@@ -30,6 +30,29 @@ jobs:
             'gpjax==0.13.4' \
             'git+https://github.com/SouthPoleTelescope/spt_candl_data.git@efe35b7bfd815a115d5123e210a6849a4175bc81'
           sha256sum wheels/* | sort > wheels/SHA256SUMS.txt
+      - name: Freeze exact candl runtime payload
+        run: |
+          set -euxo pipefail
+          mkdir -p candl_runtime
+          cp wheels/candl_like-2.2.0-py3-none-any.whl candl_runtime/
+          sha256sum candl_runtime/candl_like-2.2.0-py3-none-any.whl > candl_runtime/CANDL_SHA256.txt
+          test "$(cut -d' ' -f1 candl_runtime/CANDL_SHA256.txt)" = '4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
+          {
+            echo 'python=3.12.13'
+            echo 'candl=2.2.0'
+            echo 'candl_sha256=4c0372396e218f2e5a877b3f34cb57563e4eb9e4607b3726bbd0a333a762450b'
+            echo 'spt_candl_data=3.0.0'
+            echo 'spt_upstream_commit=efe35b7bfd815a115d5123e210a6849a4175bc81'
+            echo 'contract=SPT3G_D1_KK/GMV_withcmb/noCMBmarg'
+            echo 'purpose=ACT-ENG-SPTD1-CANDL-RUNTIME-20260904'
+          } > candl_runtime/RUNTIME_PROVENANCE.txt
+      - name: Upload exact candl runtime payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: candl-like-2.2.0-py312-exact
+          path: candl_runtime
+          compression-level: 6
+          retention-days: 7
       - name: Offline smoke from wheelhouse
         run: |
           set -euxo pipefail
