@@ -1,0 +1,62 @@
+name: NOVA Rust Toolchain Ferry
+
+on:
+  push:
+    branches:
+      - ops/nova-rust-toolchain-ferry-20260820
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ferry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve official Rust 1.89.0 distribution
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib
+          import tomllib
+          import urllib.request
+
+          manifest_url = "https://static.rust-lang.org/dist/channel-rust-1.89.0.toml"
+          manifest = tomllib.loads(urllib.request.urlopen(manifest_url, timeout=60).read().decode())
+          target = manifest["pkg"]["rust"]["target"]["x86_64-unknown-linux-gnu"]
+          pathlib.Path("resolved.env").write_text(
+              f"RUST_URL={target['xz_url']}\nRUST_SHA256={target['xz_hash']}\n",
+              encoding="utf-8",
+          )
+          PY
+          cat resolved.env >> "$GITHUB_ENV"
+          cat resolved.env
+
+      - name: Download and verify official toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=rust-1.89.0-x86_64-unknown-linux-gnu.tar.xz
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output "$file" "$RUST_URL"
+          echo "$RUST_SHA256  $file" | sha256sum --check --strict
+          stat --printf='bytes=%s\n' "$file"
+          sha256sum "$file" | tee SHA256SUMS
+
+      - name: Upload verified toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-1.89.0-x86_64-unknown-linux-gnu
+          path: |
+            rust-1.89.0-x86_64-unknown-linux-gnu.tar.xz
+            SHA256SUMS
+            resolved.env
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
