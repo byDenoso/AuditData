@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.13'
+          python-version: '3.13.5'
       - name: Install candl 2.2 and pinned SPT data
         run: |
           set -euxo pipefail
@@ -28,7 +28,6 @@ jobs:
           import candl, spt_candl_data
           print('candl_version=', candl.__version__)
           print('spt_candl_data_version=', spt_candl_data.__version__)
-          print('shortcut=', spt_candl_data.SPT3G_D1_KK)
           like = candl.LensLike(spt_candl_data.SPT3G_D1_KK, variant='GMV_withcmb')
           print('name=', like.name)
           print('N_bins=', getattr(like, 'N_bins_total', None))
@@ -43,6 +42,7 @@ jobs:
           python -m pip freeze | sort > runtime-freeze/pip-freeze.txt
           python - <<'PY' > runtime-freeze/versions.txt
           import candl, spt_candl_data, jax, gpjax, sklearn
+          print('python', __import__('sys').version)
           print('candl', candl.__version__)
           print('spt_candl_data', spt_candl_data.__version__)
           print('jax', jax.__version__)
@@ -50,7 +50,7 @@ jobs:
           print('sklearn', sklearn.__version__)
           PY
           sha256sum runtime-freeze/* > runtime-freeze/SHA256SUMS.txt
-      - name: Materialize exact Python 3.13-compatible dependency wheelhouse
+      - name: Materialize exact Python 3.13 dependency wheelhouse
         run: |
           set -euxo pipefail
           mkdir wheelhouse
@@ -63,7 +63,7 @@ jobs:
           sha256sum wheelhouse/* | sort > wheelhouse/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: spt3g-d1-kk-candl22-compatible-runtime
+          name: spt3g-d1-kk-candl22-compatible-runtime-py313
           path: runtime-freeze
           retention-days: 3
       - uses: actions/upload-artifact@v4
