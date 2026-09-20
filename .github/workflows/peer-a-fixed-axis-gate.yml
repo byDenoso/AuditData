@@ -1,0 +1,212 @@
+name: PEER-A Planck fixed-axis gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'peer_a_fixed_axis_gate_v2.py'
+      - '.github/workflows/peer-a-fixed-axis-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peer-a-fixed-axis-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.12'
+  OMP_NUM_THREADS: '2'
+  OPENBLAS_NUM_THREADS: '2'
+  MKL_NUM_THREADS: '2'
+  NUMEXPR_NUM_THREADS: '2'
+  MPLBACKEND: Agg
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore official Planck map cache
+        uses: actions/cache@v4
+        with:
+          path: data/planck_pr3_smica_nosz
+          key: planck-pr3-smica-nosz-full-hm1-hm2-v2
+
+      - name: Install pinned scientific runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip wheel
+          python -m pip install \
+            'numpy==2.1.3' \
+            'scipy==1.14.1' \
+            'matplotlib==3.9.2' \
+            'astropy==7.0.0' \
+            'healpy==1.18.1' \
+            'camb==1.6.6'
+          python - <<'PY'
+          import astropy, camb, healpy, matplotlib, numpy, scipy
+          assert camb.__version__ == '1.6.6'
+          assert healpy.__version__ == '1.18.1'
+          print('RUNTIME_PASS', numpy.__version__, scipy.__version__, matplotlib.__version__, astropy.__version__, healpy.__version__, camb.__version__)
+          PY
+
+      - name: Download official Planck maps with resume and host fallback
+        run: |
+          set -euo pipefail
+          mkdir -p data/planck_pr3_smica_nosz
+          base_path='data/Planck/release_3/all-sky-maps/maps/component-maps/cmb'
+          hosts=(
+            'https://irsawebops1.ipac.caltech.edu'
+            'https://irsawebops2.ipac.caltech.edu'
+            'https://irsa.ipac.caltech.edu'
+          )
+          files=(
+            'COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits'
+            'COM_CMB_IQU-smica-nosz_2048_R3.00_hm1.fits'
+            'COM_CMB_IQU-smica-nosz_2048_R3.00_hm2.fits'
+          )
+          for file in "${files[@]}"; do
+            destination="data/planck_pr3_smica_nosz/${file}"
+            if [[ -s "$destination" ]] && [[ $(stat -c%s "$destination") -ge 50000000 ]]; then
+              echo "PLANCK_CACHE_HIT $file $(stat -c%s "$destination")"
+              continue
+            fi
+            partial="${destination}.part"
+            success=0
+            for host in "${hosts[@]}"; do
+              url="${host}/${base_path}/${file}"
+              echo "PLANCK_DOWNLOAD_ATTEMPT $url"
+              if curl --fail --location \
+                --retry 8 --retry-all-errors --retry-delay 8 \
+                --connect-timeout 30 --max-time 3600 \
+                --continue-at - --output "$partial" "$url"; then
+                size=$(stat -c%s "$partial")
+                if [[ $size -ge 50000000 ]]; then
+                  mv "$partial" "$destination"
+                  echo "PLANCK_DOWNLOAD_PASS $file $size $host"
+                  success=1
+                  break
+                fi
+              fi
+              echo "PLANCK_DOWNLOAD_HOST_FAILED $host $file"
+            done
+            if [[ $success -ne 1 ]]; then
+              echo "PLANCK_DOWNLOAD_FAILED $file" >&2
+              exit 1
+            fi
+          done
+          sha256sum data/planck_pr3_smica_nosz/*.fits
+          du -sh data/planck_pr3_smica_nosz
+
+      - name: Run deterministic estimator smoke
+        run: |
+          set -euo pipefail
+          python peer_a_fixed_axis_gate_v2.py --self-test
+
+      - name: Execute Planck full and half-mission gate
+        run: |
+          set -euo pipefail
+          mkdir -p results/peer_a_fixed_axis
+          python peer_a_fixed_axis_gate_v2.py \
+            --output results/peer_a_fixed_axis \
+            --data-dir data/planck_pr3_smica_nosz \
+            --n-mock 4096 \
+            --seed 20260731 \
+            --lmax 64 \
+            --nside-analysis 128 \
+            --nside-band 32 \
+            |& tee results/peer_a_fixed_axis/run.log
+
+      - name: Validate evidence contract
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('results/peer_a_fixed_axis')
+          required = [
+              'results.json', 'provenance.json', 'mocks.csv', 'REPORT.md', 'run.log',
+              'alignment_calibration.png', 'low_band_calibration.png', 'split_consistency.png',
+          ]
+          missing = [name for name in required if not (root / name).is_file() or (root / name).stat().st_size == 0]
+          assert not missing, f'Missing outputs: {missing}'
+          result = json.loads((root / 'results.json').read_text(encoding='utf-8'))
+          assert result['evidence_class'] == 'PLANCK_PR3_SMICA_NOSZ_MAP_GAUSSIAN_NULL_GATE'
+          assert result['configuration']['n_mock'] == 4096
+          assert result['configuration']['seed'] == 20260731
+          assert result['configuration']['full_field'] == 'I_STOKES_INP (field 1)'
+          assert len(result['provenance']) == 3
+          assert all(item['bytes'] >= 50_000_000 for item in result['provenance'])
+          assert result['decision']['status'] in {
+              'GENERIC_ANOMALY_ONLY',
+              'ANOMALY_NOT_LOW_L_LOCALIZED',
+              'NO_PEER_A_SUPPORT_FROM_THIS_GATE',
+          }
+          for key in ('p_alignment', 'p_low_modulation', 'p_control_modulation', 'p_joint'):
+              assert 0 < float(result['mocks'][key]) <= 1
+          report = (root / 'REPORT.md').read_text(encoding='utf-8').lower()
+          assert 'cannot establish a new phenomenon' in report or 'cannot establish a new phenomenon' in result['decision']['claim_boundary'].lower() or 'not evidence that peer' in report
+          assert 'generic anisotropy' in result['decision']['claim_boundary'].lower()
+
+          manifest = {
+              'test_id': 'T-PEER-A-001',
+              'scientific_objective': 'Test whether Planck low-l alignment and fixed-axis modulation justify an exploratory direction-dependent PEER branch.',
+              'model': 'Generic low-k directional modulation gate; no anisotropic PEER perturbation hierarchy.',
+              'datasets': ['Planck PR3 SMICA-noSZ full inpainted intensity', 'Planck PR3 SMICA-noSZ HM1 intensity', 'Planck PR3 SMICA-noSZ HM2 intensity'],
+              'commit': os.environ['COMMIT_SHA'],
+              'workflow_run_id': os.environ['WORKFLOW_RUN_ID'],
+              'workflow_run_attempt': os.environ['WORKFLOW_RUN_ATTEMPT'],
+              'command': 'python peer_a_fixed_axis_gate_v2.py --output results/peer_a_fixed_axis --data-dir data/planck_pr3_smica_nosz --n-mock 4096 --seed 20260731 --lmax 64 --nside-analysis 128 --nside-band 32',
+              'seed': 20260731,
+              'mock_count': 4096,
+              'state': 'COMPLETED_AND_CONTRACT_VALIDATED',
+              'decision': result['decision']['status'],
+              'claim_boundary': result['claim_boundary'],
+          }
+          (root / 'RUN_MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
+          hashes = []
+          for path in sorted(root.iterdir()):
+              if path.is_file() and path.name != 'files.sha256':
+                  hashes.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (root / 'files.sha256').write_text('\n'.join(hashes) + '\n', encoding='utf-8')
+
+          full = result['maps']['full']
+          summary = {
+              'decision': result['decision']['status'],
+              'axis_galactic': full['combined_galactic'],
+              'alignment_angle_deg': full['alignment_angle_deg'],
+              'low_abs_asymmetry': full['low_band']['abs_amplitude'],
+              'control_abs_asymmetry': full['control_band']['abs_amplitude'],
+              'p_alignment': result['mocks']['p_alignment'],
+              'p_low_modulation': result['mocks']['p_low_modulation'],
+              'p_joint': result['mocks']['p_joint'],
+              'split_consistency': result['split_consistency'],
+              'invalid_pixel_fraction_before_fill': result['invalid_pixel_fraction_before_fill'],
+              'elapsed_seconds': result['elapsed_seconds'],
+          }
+          print('VALIDATED_SCIENTIFIC_SUMMARY=' + json.dumps(summary, sort_keys=True))
+          print('COMPLETION_CONTRACT_PASS')
+          PY
+
+      - name: Upload complete evidence package
+        uses: actions/upload-artifact@v4
+        with:
+          name: peer-a-fixed-axis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results/peer_a_fixed_axis
+          if-no-files-found: error
+          retention-days: 90
