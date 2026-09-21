@@ -1,0 +1,99 @@
+name: Rubin public-data transfer bridge
+
+on:
+  push:
+    paths:
+      - 'rubin-transfer/config.json'
+
+permissions:
+  contents: read
+
+jobs:
+  transfer:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        include:
+          - { name: x05-part-000, kind: x05, index: 0 }
+          - { name: x05-part-001, kind: x05, index: 1 }
+          - { name: calexp-batch-00, kind: calexp, index: 0 }
+          - { name: calexp-batch-01, kind: calexp, index: 1 }
+          - { name: calexp-batch-02, kind: calexp, index: 2 }
+          - { name: calexp-batch-03, kind: calexp, index: 3 }
+          - { name: calexp-batch-04, kind: calexp, index: 4 }
+          - { name: calexp-batch-05, kind: calexp, index: 5 }
+          - { name: calexp-batch-06, kind: calexp, index: 6 }
+          - { name: calexp-batch-07, kind: calexp, index: 7 }
+          - { name: calexp-batch-08, kind: calexp, index: 8 }
+          - { name: calexp-batch-09, kind: calexp, index: 9 }
+
+    steps:
+      - name: Prepare workspace
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          echo '{"schema_version":1}' > payload/_placeholder.json
+
+      - name: Download Rubin payload
+        env:
+          KIND: ${{ matrix.kind }}
+          INDEX: ${{ matrix.index }}
+        run: |
+          set -euo pipefail
+          rm -f payload/_placeholder.json
+          if [ "$KIND" = "x05" ]; then
+            URL='https://storage.googleapis.com/asteroid-institute-public/production/rubin/mpc/obs_sbn/full/parquet/obs_sbn_X05_full.parquet'
+            TOTAL=1033995336
+            HALF=516997668
+            START=$(( INDEX * HALF ))
+            END=$(( START + HALF - 1 ))
+            NAME=$(printf 'obs_sbn_X05_full.parquet.part-%03d-of-002' "$INDEX")
+            curl --fail --location --retry 12 --retry-delay 5 --retry-all-errors --range "${START}-${END}" "$URL" -o "payload/$NAME"
+            ACTUAL=$(stat -c%s "payload/$NAME")
+            [ "$ACTUAL" -eq "$HALF" ]
+            SHA=$(sha256sum "payload/$NAME" | awk '{print $1}')
+            if [ "$INDEX" -eq 0 ]; then
+              MAGIC=$(head -c 4 "payload/$NAME")
+              [ "$MAGIC" = 'PAR1' ]
+            else
+              MAGIC=$(tail -c 4 "payload/$NAME")
+              [ "$MAGIC" = 'PAR1' ]
+            fi
+            jq -n               --arg dataset_id 'RUBIN_MPC_X05_FULL_PARQUET'               --arg class 'REAL_WORLD_PUBLIC'               --arg source_url "$URL"               --arg file "$NAME"               --arg sha256 "$SHA"               --argjson part_index "$INDEX"               --argjson part_count 2               --argjson source_total_bytes "$TOTAL"               --argjson bytes "$ACTUAL"               '{schema_version:1,dataset_id:$dataset_id,class:$class,source_url:$source_url,file:$file,bytes:$bytes,sha256:$sha256,part_index:$part_index,part_count:$part_count,source_total_bytes:$source_total_bytes,validation:"RANGE_SIZE_AND_PARQUET_EDGE_MAGIC_PASS"}'               > payload/TRANSFER_RECEIPT.json
+          else
+            SCRIPT_URL='https://irsa.ipac.caltech.edu/data/theory/openuniverse2024/bulk-download-scripts/rubin-preview-u-descdm-preview_data_step1_w_2024_12-20240324T050830Z-calexp-2025.sh'
+            curl --fail --location --retry 12 --retry-delay 5 --retry-all-errors "$SCRIPT_URL" -o listing.sh
+            grep -oE "https://[^']+" listing.sh > urls.txt
+            START=$(( INDEX * 8 + 1 ))
+            END=$(( START + 7 ))
+            sed -n "${START},${END}p" urls.txt > selected.txt
+            [ "$(wc -l < selected.txt)" -eq 8 ]
+            : > files.jsonl
+            while IFS= read -r URL; do
+              NAME=$(basename "$URL")
+              curl --fail --location --retry 12 --retry-delay 5 --retry-all-errors "$URL" -o "payload/$NAME"
+              BYTES=$(stat -c%s "payload/$NAME")
+              SHA=$(sha256sum "payload/$NAME" | awk '{print $1}')
+              MAGIC=$(head -c 6 "payload/$NAME" | tr -d '\000')
+              case "$MAGIC" in
+                SIMPLE*) ;;
+                *) echo "FITS header check failed for $NAME: $MAGIC" >&2; exit 22 ;;
+              esac
+              jq -n --arg name "$NAME" --arg source_url "$URL" --arg sha256 "$SHA" --argjson bytes "$BYTES"                 '{name:$name,source_url:$source_url,bytes:$bytes,sha256:$sha256,class:"PUBLIC_SIMULATED_RUBIN_CALIBRATED_EXPOSURE",fits_header:"PASS"}' >> files.jsonl
+            done < selected.txt
+            jq -s               --arg dataset_id 'OPENUNIVERSE2024_RUBIN_CAL_EXP_2025_SAMPLE'               --arg listing_url "$SCRIPT_URL"               --argjson batch_index "$INDEX"               '{schema_version:1,dataset_id:$dataset_id,class:"PUBLIC_SIMULATED_RUBIN",listing_url:$listing_url,batch_index:$batch_index,selection:"8 consecutive URLs from official 2025 calibrated-exposure bulk script",files:.,total_bytes:(map(.bytes)|add)}'               files.jsonl > payload/TRANSFER_RECEIPT.json
+          fi
+          du -sh payload
+          sha256sum payload/* > payload/SHA256SUMS.txt
+
+      - name: Upload transient transfer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rubin-transfer-${{ matrix.name }}
+          path: payload/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
