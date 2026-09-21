@@ -1,6 +1,9 @@
 {
   "request": "RUBIN_LSST_2026",
-  "generated_at": "2026-09-21T01:30:00Z",
+  "transfer_generation": 2,
+  "generated_at": "2026-09-21T01:32:00Z",
   "target_drive_folder_id": "1DOv05NNRNshuwTteZ8NSqB2vsgUhrc2_",
-  "note": "Temporary public-data transfer bridge; artifacts retention 1 day; no secrets."
+  "chunk_policy": "connector-safe <= ~90 MB artifacts; 12 X05 byte-range parts + 125 batches x 4 official OpenUniverse raw FITS files",
+  "retention_days": 1,
+  "note": "Public repo standard runner; public data only; no secrets."
 }
